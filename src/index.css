@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Chakra Petch', 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* Custom subtle pattern for asphalt road feel */
+.bg-asphalt-pattern {
+  background-color: #0c0f12;
+  background-image: radial-gradient(#1e2631 1px, transparent 1px), radial-gradient(#1e2631 1px, #0c0f12 1px);
+  background-size: 40px 40px;
+  background-position: 0 0, 20px 20px;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #FFD54F 0%, #FFA000 50%, #FF6F00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

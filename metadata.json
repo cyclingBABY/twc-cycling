@@ -1,0 +1,6 @@
+{
+  "name": "Together We Can Cycling Uganda - TWC Cycling Academy",
+  "description": "Uganda's premier cycling club and academy based in Katwe, Kampala. Dedicated to nurturing youth riders, elite competitors, community advocacy, and organizing premier races.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
