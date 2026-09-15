@@ -33,9 +33,10 @@ export const CommunityImpact: React.FC = () => {
             {/* Left Image & Overlay */}
             <div className="lg:col-span-6 relative min-h-[280px] lg:min-h-full">
               <img
-                src="https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=1200&auto=format&fit=crop"
-                alt="TWC Cycling peloton racing for charity in Northern Uganda"
+                src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7WBsfFNzFp04i3JTuiQCmIxNf9Y1L6-TeUcaewO_8mg&s"
+                alt="TWC Cycling peloton racing for charity in Irene Gleeson Memorial Bicycle Race, Northern Uganda"
                 className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-zinc-950/90 via-zinc-950/40 to-transparent" />
               

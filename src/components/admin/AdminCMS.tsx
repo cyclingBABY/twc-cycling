@@ -7,6 +7,14 @@ import {
   AdminRole,
   SiteContentSettings,
 } from '../../types';
+import { MediaUploadModal } from './MediaUploadModal';
+import {
+  extractYouTubeId,
+  extractTikTokInfo,
+  extractInstagramInfo,
+  fetchTikTokMediaPreview,
+} from '../../data/cyclingData';
+import { compressImageFile } from '../../services/mediaStorage';
 import {
   FileText,
   Building2,
@@ -31,6 +39,13 @@ import {
   AlertCircle,
   Pin,
   Check,
+  Upload,
+  Database,
+  Film,
+  Play,
+  Maximize2,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AdminCMSProps {
@@ -42,7 +57,9 @@ interface AdminCMSProps {
     youtube: SocialMediaItem[];
     tiktok: SocialMediaItem[];
     instagram: SocialMediaItem[];
+    uploads?: SocialMediaItem[];
   };
+  uploadedMedia?: SocialMediaItem[];
   siteContent?: SiteContentSettings;
   onUpdateSiteContent?: (newSettings: Partial<SiteContentSettings>) => void;
   // Notice handlers
@@ -62,6 +79,10 @@ interface AdminCMSProps {
   onSaveMediaLink: (platform: 'youtube' | 'tiktok' | 'instagram', index: number, updatedItem: SocialMediaItem) => void;
   onAddMediaItem: (platform: 'youtube' | 'tiktok' | 'instagram', item: SocialMediaItem) => void;
   onDeleteMediaItem: (platform: 'youtube' | 'tiktok' | 'instagram', id: string) => void;
+  // Device Uploaded Media Handlers
+  onAddUploadedMedia?: (item: SocialMediaItem, blob?: Blob) => Promise<void> | void;
+  onUpdateUploadedMedia?: (item: SocialMediaItem, blob?: Blob) => Promise<void> | void;
+  onDeleteUploadedMedia?: (id: string) => Promise<void> | void;
 }
 
 export const AdminCMS: React.FC<AdminCMSProps> = ({
@@ -70,6 +91,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   sponsors,
   galleryPhotos,
   mediaData,
+  uploadedMedia = [],
   siteContent,
   onUpdateSiteContent,
   onAddNotice,
@@ -85,6 +107,9 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   onSaveMediaLink,
   onAddMediaItem,
   onDeleteMediaItem,
+  onAddUploadedMedia,
+  onUpdateUploadedMedia,
+  onDeleteUploadedMedia,
 }) => {
   const [activeTab, setActiveTab] = useState<'notices' | 'sponsors' | 'media' | 'photos' | 'site_copy'>('notices');
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,9 +132,14 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   const [photoEditForm, setPhotoEditForm] = useState<Partial<GalleryPhotoItem>>({});
 
   // Media Tab
-  const [activeMediaPlatform, setActiveMediaPlatform] = useState<'youtube' | 'tiktok' | 'instagram'>('youtube');
+  const [activeMediaPlatform, setActiveMediaPlatform] = useState<'uploads' | 'youtube' | 'tiktok' | 'instagram'>('uploads');
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [mediaEditForm, setMediaEditForm] = useState<Partial<SocialMediaItem>>({});
+
+  // Device Media Upload Modal State
+  const [isMediaUploadModalOpen, setIsMediaUploadModalOpen] = useState(false);
+  const [editingUploadedItem, setEditingUploadedItem] = useState<SocialMediaItem | null>(null);
+  const [mediaUploadDefaultType, setMediaUploadDefaultType] = useState<'photo' | 'video'>('photo');
 
   // Add Notice Form State
   const [newNoticeForm, setNewNoticeForm] = useState<Partial<NoticeItem>>({
@@ -155,6 +185,86 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
     category: 'Race Highlights',
     views: '1.2K views',
   });
+
+  // Dynamic preview state for TikTok video links
+  const [isFetchingTikTokPreview, setIsFetchingTikTokPreview] = useState(false);
+  const [isFetchingTikTokEditPreview, setIsFetchingTikTokEditPreview] = useState(false);
+  const [tikTokPreviewInfo, setTikTokPreviewInfo] = useState<{
+    thumbnailUrl?: string;
+    title?: string;
+    authorName?: string;
+    videoId?: string;
+    embedUrl?: string;
+  } | null>(null);
+  const [tikTokEditPreviewInfo, setTikTokEditPreviewInfo] = useState<{
+    thumbnailUrl?: string;
+    title?: string;
+    authorName?: string;
+    videoId?: string;
+    embedUrl?: string;
+  } | null>(null);
+
+  const handleSyncTikTokAddPreview = async (url: string) => {
+    if (!url) return;
+    const ttInfo = extractTikTokInfo(url);
+    if (!ttInfo.isTikTok) return;
+
+    setIsFetchingTikTokPreview(true);
+    try {
+      const preview = await fetchTikTokMediaPreview(url);
+      if (preview) {
+        setTikTokPreviewInfo({
+          thumbnailUrl: preview.thumbnailUrl,
+          title: preview.title,
+          authorName: preview.authorName,
+          videoId: preview.videoId || ttInfo.videoId,
+          embedUrl: preview.embedUrl || (ttInfo.videoId ? `https://www.tiktok.com/embed/v2/${ttInfo.videoId}` : undefined),
+        });
+
+        setNewMediaForm((prev) => ({
+          ...prev,
+          thumbnail: preview.thumbnailUrl || prev.thumbnail,
+          title: preview.title || prev.title || (preview.videoId ? `TWC TikTok Reel #${preview.videoId.slice(-4)}` : prev.title),
+          embedId: preview.videoId || ttInfo.videoId || prev.embedId,
+        }));
+      }
+    } catch (err) {
+      console.warn('Could not fetch TikTok preview metadata:', err);
+    } finally {
+      setIsFetchingTikTokPreview(false);
+    }
+  };
+
+  const handleSyncTikTokEditPreview = async (url: string) => {
+    if (!url) return;
+    const ttInfo = extractTikTokInfo(url);
+    if (!ttInfo.isTikTok) return;
+
+    setIsFetchingTikTokEditPreview(true);
+    try {
+      const preview = await fetchTikTokMediaPreview(url);
+      if (preview) {
+        setTikTokEditPreviewInfo({
+          thumbnailUrl: preview.thumbnailUrl,
+          title: preview.title,
+          authorName: preview.authorName,
+          videoId: preview.videoId || ttInfo.videoId,
+          embedUrl: preview.embedUrl || (ttInfo.videoId ? `https://www.tiktok.com/embed/v2/${ttInfo.videoId}` : undefined),
+        });
+
+        setMediaEditForm((prev) => ({
+          ...prev,
+          thumbnail: preview.thumbnailUrl || prev.thumbnail,
+          title: preview.title || prev.title || (preview.videoId ? `TWC TikTok Reel #${preview.videoId.slice(-4)}` : prev.title),
+          embedId: preview.videoId || ttInfo.videoId || prev.embedId,
+        }));
+      }
+    } catch (err) {
+      console.warn('Could not fetch TikTok edit preview metadata:', err);
+    } finally {
+      setIsFetchingTikTokEditPreview(false);
+    }
+  };
 
   // Site Copy Form State
   const [siteCopyForm, setSiteCopyForm] = useState<SiteContentSettings>(() => ({
@@ -344,27 +454,84 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   // --- 4. MEDIA LINK HANDLERS ---
   const handleCreateMedia = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMediaForm.title || !newMediaForm.url) return;
+    const rawUrl = (newMediaForm.url || '').trim();
+    if (!rawUrl) {
+      triggerToast('Please provide a valid media link.');
+      return;
+    }
 
     let embedId = newMediaForm.embedId;
-    if (!embedId && newMediaForm.url) {
-      if (activeMediaPlatform === 'youtube') {
-        const match = newMediaForm.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-        if (match) embedId = match[1];
+    let computedUrl = rawUrl;
+    let computedThumbnail = newMediaForm.thumbnail;
+    let generatedTitle = newMediaForm.title ? newMediaForm.title.trim() : '';
+    let category = newMediaForm.category;
+
+    if (activeMediaPlatform === 'youtube') {
+      const parsedYtId = extractYouTubeId(rawUrl);
+      if (parsedYtId) {
+        embedId = parsedYtId;
+        computedUrl = `https://www.youtube.com/watch?v=${parsedYtId}`;
+        if (!computedThumbnail || computedThumbnail.includes('unsplash')) {
+          computedThumbnail = `https://i.ytimg.com/vi/${parsedYtId}/hqdefault.jpg`;
+        }
       }
+      if (!generatedTitle) {
+        generatedTitle = parsedYtId ? `TWC YouTube Race Video (${parsedYtId})` : 'TWC Official YouTube Video';
+      }
+      if (!category) category = 'Race Highlights';
+    } else if (activeMediaPlatform === 'tiktok') {
+      const ttInfo = extractTikTokInfo(rawUrl);
+      if (ttInfo.videoId) {
+        embedId = ttInfo.videoId;
+      }
+      computedUrl = ttInfo.cleanUrl || rawUrl;
+      // Prefer preview thumbnail fetched directly from TikTok video link
+      if (tikTokPreviewInfo?.thumbnailUrl && (!computedThumbnail || computedThumbnail.includes('unsplash'))) {
+        computedThumbnail = tikTokPreviewInfo.thumbnailUrl;
+      }
+      if (!computedThumbnail) {
+        computedThumbnail = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop';
+      }
+      if (!generatedTitle) {
+        generatedTitle = tikTokPreviewInfo?.title || (ttInfo.videoId
+          ? `TWC TikTok Sprint Reel #${ttInfo.videoId.slice(-4)}`
+          : 'Together We Can Cycling TikTok Reel');
+      }
+      if (!category) category = 'TikTok Reel';
+    } else if (activeMediaPlatform === 'instagram') {
+      const igInfo = extractInstagramInfo(rawUrl);
+      if (igInfo.shortcode) {
+        embedId = igInfo.shortcode;
+      }
+      computedUrl = igInfo.cleanUrl || rawUrl;
+      if (!computedThumbnail) {
+        computedThumbnail = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=800&auto=format&fit=crop';
+      }
+      if (!generatedTitle) {
+        generatedTitle = igInfo.isReel
+          ? 'TWC Instagram Reel Highlight'
+          : 'Together We Can Cycling Instagram Post';
+      }
+      if (!category) category = igInfo.isReel ? 'Instagram Reel' : 'Instagram Post';
     }
 
     const item: SocialMediaItem = {
       id: `media-${Date.now()}`,
-      title: newMediaForm.title,
-      description: newMediaForm.description || '',
-      url: newMediaForm.url,
+      title: generatedTitle,
+      caption: generatedTitle,
+      description: newMediaForm.description || generatedTitle,
+      url: computedUrl,
+      videoUrl: computedUrl,
+      mediaUrl: computedUrl,
+      postUrl: computedUrl,
+      imageUrl: computedThumbnail,
+      youtubeId: activeMediaPlatform === 'youtube' ? embedId : undefined,
       embedId: embedId || 'live',
       author: newMediaForm.author || 'TWC Cycling Academy Uganda',
       date: newMediaForm.date || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      thumbnail: newMediaForm.thumbnail || 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop',
-      category: newMediaForm.category || 'Race Highlights',
-      views: newMediaForm.views || '1K views',
+      thumbnail: computedThumbnail || 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop',
+      category: category || 'Race Highlights',
+      views: newMediaForm.views || '1.2K views',
     };
 
     onAddMediaItem(activeMediaPlatform, item);
@@ -380,42 +547,126 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
       views: '1.2K views',
     });
     setShowMediaAddForm(false);
-    triggerToast(`New ${activeMediaPlatform.toUpperCase()} video published!`);
+    setTikTokPreviewInfo(null);
+    triggerToast(`New ${activeMediaPlatform.toUpperCase()} link published successfully!`);
   };
 
   const handleStartEditMedia = (item: SocialMediaItem) => {
     setEditingMediaId(item.id);
-    setMediaEditForm({ ...item });
+    setTikTokEditPreviewInfo(null);
+    const bestUrl =
+      item.videoUrl ||
+      item.url ||
+      item.mediaUrl ||
+      (item as any).postUrl ||
+      (item.youtubeId ? `https://www.youtube.com/watch?v=${item.youtubeId}` : '');
+    const bestYtId = item.youtubeId || item.embedId || extractYouTubeId(bestUrl) || '';
+    const bestThumbnail =
+      item.thumbnail ||
+      (item as any).imageUrl ||
+      (bestYtId ? `https://i.ytimg.com/vi/${bestYtId}/hqdefault.jpg` : '');
+    const bestTitle = item.title || (item as any).caption || '';
+
+    setMediaEditForm({
+      ...item,
+      title: bestTitle,
+      caption: (item as any).caption || bestTitle,
+      description: item.description || (item as any).caption || bestTitle,
+      url: bestUrl,
+      videoUrl: bestUrl,
+      postUrl: bestUrl,
+      mediaUrl: bestUrl,
+      embedId: bestYtId || (item as any).shortcode || item.embedId || '',
+      youtubeId: bestYtId,
+      thumbnail: bestThumbnail,
+      imageUrl: bestThumbnail,
+    });
+
+    if (activeMediaPlatform === 'tiktok' && bestUrl) {
+      handleSyncTikTokEditPreview(bestUrl);
+    }
   };
 
   const handleSaveEditedMedia = (platform: 'youtube' | 'tiktok' | 'instagram', index: number) => {
-    if (!editingMediaId || !mediaEditForm.title || !mediaEditForm.url) return;
+    const rawUrl = (mediaEditForm.url || mediaEditForm.videoUrl || (mediaEditForm as any).postUrl || '').trim();
+    if (!editingMediaId || !rawUrl) {
+      triggerToast('Please enter a valid media link.');
+      return;
+    }
 
     const originalList = mediaData[platform];
     const existing = originalList[index];
     if (!existing) return;
 
-    let embedId = mediaEditForm.embedId || existing.embedId;
-    if (platform === 'youtube' && mediaEditForm.url) {
-      const match = mediaEditForm.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-      if (match) embedId = match[1];
+    let embedId = mediaEditForm.embedId || existing.embedId || existing.youtubeId;
+    let computedUrl = rawUrl;
+    let computedThumbnail = mediaEditForm.thumbnail || existing.thumbnail || (existing as any).imageUrl;
+
+    if (platform === 'youtube') {
+      const parsedYtId = extractYouTubeId(rawUrl);
+      if (parsedYtId) {
+        embedId = parsedYtId;
+        computedUrl = `https://www.youtube.com/watch?v=${parsedYtId}`;
+        // Automatically sync thumbnail to the new YouTube video provided
+        if (
+          !mediaEditForm.thumbnail ||
+          mediaEditForm.thumbnail === existing.thumbnail ||
+          mediaEditForm.thumbnail.includes('unsplash') ||
+          mediaEditForm.thumbnail.includes('ytimg.com') ||
+          mediaEditForm.thumbnail.includes('youtube.com')
+        ) {
+          computedThumbnail = `https://i.ytimg.com/vi/${parsedYtId}/hqdefault.jpg`;
+        }
+      }
+    } else if (platform === 'tiktok') {
+      const ttInfo = extractTikTokInfo(rawUrl);
+      if (ttInfo.videoId) {
+        embedId = ttInfo.videoId;
+      }
+      computedUrl = ttInfo.cleanUrl || rawUrl;
+      // Prefer thumbnail fetched directly from TikTok video link
+      if (tikTokEditPreviewInfo?.thumbnailUrl && (!mediaEditForm.thumbnail || mediaEditForm.thumbnail === existing.thumbnail || mediaEditForm.thumbnail.includes('unsplash'))) {
+        computedThumbnail = tikTokEditPreviewInfo.thumbnailUrl;
+      }
+      if (!computedThumbnail) {
+        computedThumbnail = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop';
+      }
+    } else if (platform === 'instagram') {
+      const igInfo = extractInstagramInfo(rawUrl);
+      if (igInfo.shortcode) {
+        embedId = igInfo.shortcode;
+      }
+      computedUrl = igInfo.cleanUrl || rawUrl;
+      if (!computedThumbnail) {
+        computedThumbnail = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=800&auto=format&fit=crop';
+      }
     }
+
+    const title = mediaEditForm.title ? mediaEditForm.title.trim() : (existing.title || (existing as any).caption || 'TWC Media');
 
     const updatedItem: SocialMediaItem = {
       ...existing,
-      title: mediaEditForm.title || existing.title,
-      url: mediaEditForm.url || existing.url,
+      id: existing.id,
+      title,
+      caption: (mediaEditForm as any).caption || mediaEditForm.description || existing.caption || title,
       description: mediaEditForm.description !== undefined ? mediaEditForm.description : existing.description,
-      embedId,
-      thumbnail: mediaEditForm.thumbnail || existing.thumbnail,
+      url: computedUrl,
+      videoUrl: computedUrl,
+      mediaUrl: computedUrl,
+      postUrl: computedUrl,
+      imageUrl: computedThumbnail,
+      thumbnail: computedThumbnail,
+      youtubeId: platform === 'youtube' ? embedId : undefined,
+      embedId: embedId || 'live',
       category: mediaEditForm.category || existing.category,
       views: mediaEditForm.views || existing.views,
+      likes: mediaEditForm.likes || (existing as any).likes,
     };
 
     onSaveMediaLink(platform, index, updatedItem);
     setEditingMediaId(null);
     setMediaEditForm({});
-    triggerToast(`Updated ${platform.toUpperCase()} media link!`);
+    triggerToast(`Updated ${platform.toUpperCase()} media link following your input!`);
   };
 
   // --- 5. SITE CONTENT / COPY HANDLERS ---
@@ -452,12 +703,22 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
     );
   }, [galleryPhotos, searchQuery]);
 
-  const currentMediaList = mediaData[activeMediaPlatform] || [];
+  const currentMediaList = useMemo(() => {
+    if (activeMediaPlatform === 'uploads') {
+      return uploadedMedia || mediaData.uploads || [];
+    }
+    return mediaData[activeMediaPlatform] || [];
+  }, [activeMediaPlatform, uploadedMedia, mediaData]);
+
   const filteredMedia = useMemo(() => {
     if (!searchQuery.trim()) return currentMediaList;
     const q = searchQuery.toLowerCase();
     return currentMediaList.filter(
-      (m) => m.title.toLowerCase().includes(q) || (m.description && m.description.toLowerCase().includes(q))
+      (m) =>
+        m.title.toLowerCase().includes(q) ||
+        (m.description && m.description.toLowerCase().includes(q)) ||
+        (m.category && m.category.toLowerCase().includes(q)) ||
+        (m.caption && m.caption.toLowerCase().includes(q))
     );
   }, [currentMediaList, searchQuery]);
 
@@ -643,31 +904,61 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
           )}
 
           {activeTab === 'media' && (
-            <button
-              id="cms-add-media-btn"
-              onClick={() => {
-                setShowMediaAddForm(!showMediaAddForm);
-                setEditingMediaId(null);
-              }}
-              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
-            >
-              {showMediaAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              <span>{showMediaAddForm ? 'Close Form' : `+ Add ${activeMediaPlatform.toUpperCase()} Video`}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                id="cms-upload-media-btn"
+                onClick={() => {
+                  setEditingUploadedItem(null);
+                  setMediaUploadDefaultType('photo');
+                  setIsMediaUploadModalOpen(true);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-extrabold font-heading flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                <span>+ Upload From PC/Device</span>
+              </button>
+
+              <button
+                id="cms-add-media-btn"
+                onClick={() => {
+                  setShowMediaAddForm(!showMediaAddForm);
+                  setEditingMediaId(null);
+                }}
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer border border-zinc-700 transition-all"
+              >
+                {showMediaAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                <span>{showMediaAddForm ? 'Close Form' : '+ Social Web Link'}</span>
+              </button>
+            </div>
           )}
 
           {activeTab === 'photos' && (
-            <button
-              id="cms-add-photo-btn"
-              onClick={() => {
-                setShowPhotoAddForm(!showPhotoAddForm);
-                setEditingPhotoId(null);
-              }}
-              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
-            >
-              {showPhotoAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              <span>{showPhotoAddForm ? 'Close Form' : '+ Add Photo'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                id="cms-upload-photo-btn"
+                onClick={() => {
+                  setEditingUploadedItem(null);
+                  setMediaUploadDefaultType('photo');
+                  setIsMediaUploadModalOpen(true);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-extrabold font-heading flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                <span>+ Upload Photo from PC</span>
+              </button>
+
+              <button
+                id="cms-add-photo-btn"
+                onClick={() => {
+                  setShowPhotoAddForm(!showPhotoAddForm);
+                  setEditingPhotoId(null);
+                }}
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer border border-zinc-700 transition-all"
+              >
+                {showPhotoAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                <span>{showPhotoAddForm ? 'Close Form' : '+ Photo URL'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1296,8 +1587,23 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
       {activeTab === 'media' && (
         <div className="space-y-6">
           {/* Platform Switcher */}
-          <div className="flex items-center justify-between bg-zinc-900 p-2 rounded-2xl border border-zinc-800">
-            <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center justify-between bg-zinc-900 p-2 rounded-2xl border border-zinc-800 flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <button
+                onClick={() => {
+                  setActiveMediaPlatform('uploads');
+                  setEditingMediaId(null);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  activeMediaPlatform === 'uploads'
+                    ? 'bg-amber-500 text-black shadow-md font-extrabold'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Upload className="w-4 h-4" />
+                <span>Device Uploads Vault ({(uploadedMedia || []).length})</span>
+              </button>
+
               <button
                 onClick={() => {
                   setActiveMediaPlatform('youtube');
@@ -1343,7 +1649,99 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                 <span>Instagram Feed ({mediaData.instagram.length})</span>
               </button>
             </div>
+
+            {activeMediaPlatform === 'uploads' ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditingUploadedItem(null);
+                    setMediaUploadDefaultType('photo');
+                    setIsMediaUploadModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>+ Upload File</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMediaAddForm(!showMediaAddForm);
+                    setEditingMediaId(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-md transition-all ${
+                    activeMediaPlatform === 'youtube'
+                      ? 'bg-red-600 hover:bg-red-500 text-white'
+                      : activeMediaPlatform === 'tiktok'
+                      ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
+                      : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white'
+                  }`}
+                >
+                  {showMediaAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>
+                    {showMediaAddForm
+                      ? 'Close'
+                      : `+ Add ${activeMediaPlatform === 'youtube' ? 'YouTube' : activeMediaPlatform === 'tiktok' ? 'TikTok' : 'Instagram'} Link`}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Device Upload Vault Cloud Sync Banner */}
+          {activeMediaPlatform === 'uploads' && (
+            <div className="p-4 rounded-2xl bg-zinc-900/90 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex-shrink-0 mt-0.5">
+                  <Database className="w-4 h-4" />
+                </span>
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider font-heading">
+                      Firestore Database Media Storage & Local Cache
+                    </h4>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.2 rounded-full font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live Synchronized
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Upload photos and videos directly from your PC or mobile device. Media records and metadata are persisted securely in your database, with instant offline caching and smooth playback.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingUploadedItem(null);
+                    setMediaUploadDefaultType('photo');
+                    setIsMediaUploadModalOpen(true);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-bold flex items-center gap-1.5 border border-zinc-700 cursor-pointer"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>+ Photo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingUploadedItem(null);
+                    setMediaUploadDefaultType('video');
+                    setIsMediaUploadModalOpen(true);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-cyan-400 text-xs font-bold flex items-center gap-1.5 border border-zinc-700 cursor-pointer"
+                >
+                  <Film className="w-3.5 h-3.5" />
+                  <span>+ Video</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Add Media Item Form */}
           {showMediaAddForm && (
@@ -1354,7 +1752,9 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider font-heading">
                   <Video className="w-4 h-4" />
-                  <span>Publish New {activeMediaPlatform.toUpperCase()} Video / Post</span>
+                  <span>
+                    Add New {activeMediaPlatform === 'youtube' ? 'YouTube Video' : activeMediaPlatform === 'tiktok' ? 'TikTok Reel' : 'Instagram Post'}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -1367,31 +1767,137 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="text-zinc-400 font-semibold block mb-1">Title / Caption *</label>
+                  <label className="text-zinc-400 font-semibold block mb-1">
+                    Direct {activeMediaPlatform.toUpperCase()} URL / Link *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    placeholder={
+                      activeMediaPlatform === 'youtube'
+                        ? 'https://www.youtube.com/watch?v=... or https://youtu.be/...'
+                        : activeMediaPlatform === 'tiktok'
+                        ? 'https://www.tiktok.com/@togetherwecancyclingug/video/...'
+                        : 'https://www.instagram.com/reel/... or https://www.instagram.com/p/...'
+                    }
+                    value={newMediaForm.url || ''}
+                    onChange={(e) => {
+                      const nextUrl = e.target.value;
+                      const parsedYt = extractYouTubeId(nextUrl);
+                      const parsedTT = extractTikTokInfo(nextUrl);
+                      const parsedIG = extractInstagramInfo(nextUrl);
+
+                      let newThumb = newMediaForm.thumbnail;
+                      let newTitle = newMediaForm.title;
+                      let newCategory = newMediaForm.category;
+
+                      if (activeMediaPlatform === 'youtube' && parsedYt) {
+                        if (!newThumb || newThumb.includes('unsplash')) {
+                          newThumb = `https://i.ytimg.com/vi/${parsedYt}/hqdefault.jpg`;
+                        }
+                        if (!newCategory) newCategory = 'Race Highlights';
+                      } else if (activeMediaPlatform === 'tiktok' && parsedTT.isTikTok) {
+                        if (!newThumb) {
+                          newThumb = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop';
+                        }
+                        if (!newTitle && parsedTT.videoId) {
+                          newTitle = `TWC TikTok Sprint Reel #${parsedTT.videoId.slice(-4)}`;
+                        }
+                        if (!newCategory) newCategory = 'TikTok Reel';
+                        // Automatically fetch preview from TikTok video link
+                        handleSyncTikTokAddPreview(nextUrl);
+                      } else if (activeMediaPlatform === 'instagram' && parsedIG.isInstagram) {
+                        if (!newThumb) {
+                          newThumb = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=800&auto=format&fit=crop';
+                        }
+                        if (!newTitle) {
+                          newTitle = parsedIG.isReel ? 'TWC Instagram Reel Highlight' : 'TWC Instagram Race Update';
+                        }
+                        if (!newCategory) newCategory = parsedIG.isReel ? 'Instagram Reel' : 'Instagram Post';
+                      }
+
+                      setNewMediaForm((prev) => ({
+                        ...prev,
+                        url: nextUrl,
+                        title: newTitle || prev.title,
+                        category: newCategory || prev.category,
+                        embedId: parsedYt || parsedTT.videoId || parsedIG.shortcode || prev.embedId,
+                        thumbnail: newThumb,
+                      }));
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white focus:outline-none focus:border-amber-500 font-mono text-[11px]"
+                  />
+
+                  {/* Real-time Link Detection Badges & Preview Triggers */}
+                  {activeMediaPlatform === 'youtube' && extractYouTubeId(newMediaForm.url || '') && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      <span>YouTube Video Detected (ID: <strong>{extractYouTubeId(newMediaForm.url || '')}</strong>). Thumbnail auto-synced!</span>
+                    </div>
+                  )}
+
+                  {activeMediaPlatform === 'tiktok' && extractTikTokInfo(newMediaForm.url || '').isTikTok && (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-cyan-400 font-mono">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                          <span>
+                            TikTok Reel Detected {extractTikTokInfo(newMediaForm.url || '').videoId ? `(ID: ${extractTikTokInfo(newMediaForm.url || '').videoId})` : ''}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSyncTikTokAddPreview(newMediaForm.url || '')}
+                          disabled={isFetchingTikTokPreview}
+                          className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          {isFetchingTikTokPreview ? (
+                            <>
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              <span>Fetching Preview...</span>
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="w-2.5 h-2.5" />
+                              <span>Sync Preview from Link</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {tikTokPreviewInfo?.authorName && (
+                        <p className="text-[10px] text-zinc-400 font-mono">
+                          Creator: <strong className="text-zinc-200">@{tikTokPreviewInfo.authorName}</strong>
+                          {tikTokPreviewInfo.title && ` • "${tikTokPreviewInfo.title.slice(0, 45)}..."`}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {activeMediaPlatform === 'instagram' && extractInstagramInfo(newMediaForm.url || '').isInstagram && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-pink-400 font-mono">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-pink-400 flex-shrink-0" />
+                      <span>
+                        Instagram {extractInstagramInfo(newMediaForm.url || '').isReel ? 'Reel' : 'Post'} Detected {extractInstagramInfo(newMediaForm.url || '').shortcode ? `(${extractInstagramInfo(newMediaForm.url || '').shortcode})` : ''} - Ready to publish!
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-zinc-400 font-semibold block mb-1">
+                    Title / Caption <span className="text-zinc-500 font-normal">(Optional, will auto-generate if empty)</span>
+                  </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Lubiri 105km Final Sprint Highlights"
+                    placeholder="e.g. Lubiri 105km Sprint Highlights"
                     value={newMediaForm.title || ''}
                     onChange={(e) => setNewMediaForm({ ...newMediaForm, title: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
-                <div>
-                  <label className="text-zinc-400 font-semibold block mb-1">Direct Media URL *</label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="https://www.youtube.com/watch?v=... or https://tiktok.com/@twccycling..."
-                    value={newMediaForm.url || ''}
-                    onChange={(e) => setNewMediaForm({ ...newMediaForm, url: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white focus:outline-none focus:border-amber-500 font-mono text-[11px]"
-                  />
-                </div>
-
                 <div className="md:col-span-2">
-                  <label className="text-zinc-400 font-semibold block mb-1">Video Summary</label>
+                  <label className="text-zinc-400 font-semibold block mb-1">Summary / Caption Note</label>
                   <textarea
                     rows={2}
                     placeholder="Brief description of the clip or race category featured..."
@@ -1409,18 +1915,108 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                     onChange={(e) => setNewMediaForm({ ...newMediaForm, thumbnail: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white focus:outline-none focus:border-amber-500 font-mono text-[11px]"
                   />
+                  {newMediaForm.thumbnail && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <img
+                        src={newMediaForm.thumbnail}
+                        alt="Thumbnail preview"
+                        referrerPolicy="no-referrer"
+                        className="w-16 h-10 object-cover rounded-md border border-zinc-800"
+                      />
+                      <span className="text-[10px] text-zinc-400">Cover image preview</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="text-zinc-400 font-semibold block mb-1">Category</label>
                   <input
                     type="text"
-                    placeholder="e.g. Race Highlights, Youth Clinic, Crash Analysis"
+                    placeholder={
+                      activeMediaPlatform === 'tiktok'
+                        ? 'TikTok Reel'
+                        : activeMediaPlatform === 'instagram'
+                        ? 'Instagram Reel'
+                        : 'Race Highlights'
+                    }
                     value={newMediaForm.category || ''}
                     onChange={(e) => setNewMediaForm({ ...newMediaForm, category: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
+
+                {/* Live TikTok Video & Thumbnail Preview Box (Directly from provided video link) */}
+                {activeMediaPlatform === 'tiktok' && extractTikTokInfo(newMediaForm.url || '').isTikTok && (
+                  <div className="md:col-span-2 p-4 rounded-2xl bg-zinc-950 border border-cyan-500/50 space-y-3 animate-in fade-in">
+                    <div className="flex items-center justify-between text-xs font-heading border-b border-zinc-800 pb-2">
+                      <span className="text-cyan-400 font-bold flex items-center gap-1.5">
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Live Video Preview (Sourced from TikTok Link)</span>
+                      </span>
+                      {tikTokPreviewInfo?.authorName ? (
+                        <span className="text-[11px] text-zinc-400 font-mono">
+                          @{tikTokPreviewInfo.authorName}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          TikTok Live Embed
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                      {/* Live Embedded Player */}
+                      <div className="aspect-[9/16] max-h-72 rounded-xl overflow-hidden bg-black border border-zinc-800 flex items-center justify-center relative shadow-inner">
+                        {extractTikTokInfo(newMediaForm.url || '').videoId ? (
+                          <iframe
+                            src={`https://www.tiktok.com/embed/v2/${extractTikTokInfo(newMediaForm.url || '').videoId}`}
+                            title="Live TikTok Video Player"
+                            className="w-full h-full border-0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div className="p-4 text-center text-zinc-400 text-xs flex flex-col items-center gap-2">
+                            <Play className="w-8 h-8 text-cyan-400 opacity-60" />
+                            <span>Preview will display when full video URL is provided</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Thumbnail fetched from link */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                            <span>Cover Image (From Video Link)</span>
+                          </span>
+                        </div>
+                        <div className="aspect-[9/16] max-h-52 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 relative group">
+                          <img
+                            src={tikTokPreviewInfo?.thumbnailUrl || newMediaForm.thumbnail || 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop'}
+                            alt="TikTok video preview"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2.5">
+                            <span className="text-[10px] text-zinc-300 font-mono truncate">
+                              {tikTokPreviewInfo?.title || newMediaForm.title || 'TikTok Reel'}
+                            </span>
+                          </div>
+                        </div>
+                        <a
+                          href={newMediaForm.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-medium hover:underline pt-1"
+                        >
+                          <span>Open original video in TikTok</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800">
@@ -1436,7 +2032,9 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold font-heading cursor-pointer shadow-lg flex items-center gap-1.5"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>Publish Video</span>
+                  <span>
+                    Publish {activeMediaPlatform === 'youtube' ? 'Video' : activeMediaPlatform === 'tiktok' ? 'TikTok Reel' : 'Instagram Post'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1484,17 +2082,144 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                         </div>
 
                         <div>
-                          <label className="text-zinc-400 block mb-1">Direct URL *</label>
+                          <label className="text-zinc-400 block mb-1">
+                            Direct {activeMediaPlatform.toUpperCase()} URL / Link *
+                          </label>
                           <input
                             type="url"
-                            value={mediaEditForm.url || ''}
-                            onChange={(e) => setMediaEditForm({ ...mediaEditForm, url: e.target.value })}
+                            value={mediaEditForm.url || mediaEditForm.videoUrl || (mediaEditForm as any).postUrl || ''}
+                            onChange={(e) => {
+                              const nextUrl = e.target.value;
+                              const parsedYt = extractYouTubeId(nextUrl);
+                              const parsedTT = extractTikTokInfo(nextUrl);
+                              const parsedIG = extractInstagramInfo(nextUrl);
+
+                              let newThumb = mediaEditForm.thumbnail;
+                              let newEmbedId = mediaEditForm.embedId;
+
+                              if (activeMediaPlatform === 'youtube' && parsedYt) {
+                                newEmbedId = parsedYt;
+                                if (!newThumb || newThumb.includes('unsplash') || newThumb.includes('ytimg.com')) {
+                                  newThumb = `https://i.ytimg.com/vi/${parsedYt}/hqdefault.jpg`;
+                                }
+                              } else if (activeMediaPlatform === 'tiktok') {
+                                if (parsedTT.videoId) newEmbedId = parsedTT.videoId;
+                                if (!newThumb) {
+                                  newThumb = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop';
+                                }
+                              } else if (activeMediaPlatform === 'tiktok') {
+                                if (parsedTT.videoId) newEmbedId = parsedTT.videoId;
+                                if (!newThumb) {
+                                  newThumb = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop';
+                                }
+                                // Auto-fetch live preview from TikTok link
+                                handleSyncTikTokEditPreview(nextUrl);
+                              } else if (activeMediaPlatform === 'instagram') {
+                                if (parsedIG.shortcode) newEmbedId = parsedIG.shortcode;
+                                if (!newThumb) {
+                                  newThumb = 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=800&auto=format&fit=crop';
+                                }
+                              }
+
+                              setMediaEditForm((prev) => ({
+                                ...prev,
+                                url: nextUrl,
+                                videoUrl: nextUrl,
+                                postUrl: nextUrl,
+                                mediaUrl: nextUrl,
+                                embedId: newEmbedId || prev.embedId,
+                                youtubeId: activeMediaPlatform === 'youtube' ? (parsedYt || prev.youtubeId) : undefined,
+                                thumbnail: newThumb,
+                                imageUrl: newThumb,
+                              }));
+                            }}
+                            placeholder={
+                              activeMediaPlatform === 'youtube'
+                                ? 'https://www.youtube.com/watch?v=... or https://youtu.be/...'
+                                : activeMediaPlatform === 'tiktok'
+                                ? 'https://www.tiktok.com/@togetherwecancyclingug/video/...'
+                                : 'https://www.instagram.com/reel/... or https://www.instagram.com/p/...'
+                            }
+                            className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white font-mono text-[11px]"
+                          />
+
+                          {/* Real-time Detection Badge in Edit Mode */}
+                          {activeMediaPlatform === 'youtube' && extractYouTubeId(mediaEditForm.url || mediaEditForm.videoUrl || '') && (
+                            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              <span>Detected YouTube Video ID: <strong>{extractYouTubeId(mediaEditForm.url || mediaEditForm.videoUrl || '')}</strong> (Auto-synced)</span>
+                            </div>
+                          )}
+
+                          {activeMediaPlatform === 'tiktok' && extractTikTokInfo(mediaEditForm.url || mediaEditForm.videoUrl || '').isTikTok && (
+                            <div className="mt-2 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-cyan-400 font-mono">
+                                <div className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                                  <span>
+                                    Detected TikTok Reel {extractTikTokInfo(mediaEditForm.url || mediaEditForm.videoUrl || '').videoId ? `(ID: ${extractTikTokInfo(mediaEditForm.url || mediaEditForm.videoUrl || '').videoId})` : ''}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncTikTokEditPreview(mediaEditForm.url || mediaEditForm.videoUrl || '')}
+                                  disabled={isFetchingTikTokEditPreview}
+                                  className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  {isFetchingTikTokEditPreview ? (
+                                    <>
+                                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                      <span>Syncing...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <RefreshCw className="w-2.5 h-2.5" />
+                                      <span>Sync Preview from Link</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              {tikTokEditPreviewInfo?.authorName && (
+                                <p className="text-[10px] text-zinc-400 font-mono">
+                                  Creator: <strong className="text-zinc-200">@{tikTokEditPreviewInfo.authorName}</strong>
+                                  {tikTokEditPreviewInfo.title && ` • "${tikTokEditPreviewInfo.title.slice(0, 45)}..."`}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {activeMediaPlatform === 'instagram' && extractInstagramInfo(mediaEditForm.url || (mediaEditForm as any).postUrl || '').isInstagram && (
+                            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-pink-400 font-mono">
+                              <CheckCircle2 className="w-3 h-3 text-pink-400 flex-shrink-0" />
+                              <span>
+                                Detected Instagram {extractInstagramInfo(mediaEditForm.url || (mediaEditForm as any).postUrl || '').isReel ? 'Reel' : 'Post'} {extractInstagramInfo(mediaEditForm.url || (mediaEditForm as any).postUrl || '').shortcode ? `(${extractInstagramInfo(mediaEditForm.url || (mediaEditForm as any).postUrl || '').shortcode})` : ''}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="text-zinc-400 block mb-1">Category</label>
+                          <input
+                            type="text"
+                            value={mediaEditForm.category || ''}
+                            onChange={(e) => setMediaEditForm({ ...mediaEditForm, category: e.target.value })}
+                            className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-zinc-400 block mb-1">Cover Thumbnail URL</label>
+                          <input
+                            type="url"
+                            value={mediaEditForm.thumbnail || ''}
+                            onChange={(e) => setMediaEditForm({ ...mediaEditForm, thumbnail: e.target.value })}
                             className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white font-mono text-[11px]"
                           />
                         </div>
 
                         <div className="md:col-span-2">
-                          <label className="text-zinc-400 block mb-1">Summary</label>
+                          <label className="text-zinc-400 block mb-1">Summary / Description</label>
                           <input
                             type="text"
                             value={mediaEditForm.description || ''}
@@ -1502,6 +2227,94 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                             className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white"
                           />
                         </div>
+
+                        {/* Live TikTok Video & Thumbnail Preview Box (Directly from provided video link in Edit mode) */}
+                        {activeMediaPlatform === 'tiktok' && extractTikTokInfo(mediaEditForm.url || mediaEditForm.videoUrl || '').isTikTok && (
+                          <div className="md:col-span-2 p-4 rounded-2xl bg-zinc-950 border border-cyan-500/50 space-y-3 animate-in fade-in">
+                            <div className="flex items-center justify-between text-xs font-heading border-b border-zinc-800 pb-2">
+                              <span className="text-cyan-400 font-bold flex items-center gap-1.5">
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                <span>Live Video Preview (Sourced from TikTok Link)</span>
+                              </span>
+                              {tikTokEditPreviewInfo?.authorName ? (
+                                <span className="text-[11px] text-zinc-400 font-mono">
+                                  @{tikTokEditPreviewInfo.authorName}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-zinc-500 font-mono">
+                                  TikTok Live Embed
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                              {/* Live Embedded Player */}
+                              <div className="aspect-[9/16] max-h-72 rounded-xl overflow-hidden bg-black border border-zinc-800 flex items-center justify-center relative shadow-inner">
+                                {extractTikTokInfo(mediaEditForm.url || mediaEditForm.videoUrl || '').videoId ? (
+                                  <iframe
+                                    src={`https://www.tiktok.com/embed/v2/${extractTikTokInfo(mediaEditForm.url || mediaEditForm.videoUrl || '').videoId}`}
+                                    title="Live TikTok Video Player"
+                                    className="w-full h-full border-0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                ) : (
+                                  <div className="p-4 text-center text-zinc-400 text-xs flex flex-col items-center gap-2">
+                                    <Play className="w-8 h-8 text-cyan-400 opacity-60" />
+                                    <span>Preview will display when full video URL is provided</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Thumbnail fetched from link */}
+                              <div className="space-y-2.5">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                                    <span>Cover Image (From Video Link)</span>
+                                  </span>
+                                </div>
+                                <div className="aspect-[9/16] max-h-52 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 relative group">
+                                  <img
+                                    src={tikTokEditPreviewInfo?.thumbnailUrl || mediaEditForm.thumbnail || 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop'}
+                                    alt="TikTok video preview"
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2.5">
+                                    <span className="text-[10px] text-zinc-300 font-mono truncate">
+                                      {tikTokEditPreviewInfo?.title || mediaEditForm.title || 'TikTok Reel'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <a
+                                  href={mediaEditForm.url || mediaEditForm.videoUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-medium hover:underline pt-1"
+                                >
+                                  <span>Open original video in TikTok</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {activeMediaPlatform !== 'tiktok' && mediaEditForm.thumbnail && (
+                          <div className="md:col-span-2 flex items-center gap-3 p-2 bg-zinc-950 rounded-xl border border-zinc-800">
+                            <img
+                              src={mediaEditForm.thumbnail}
+                              alt="Thumbnail preview"
+                              referrerPolicy="no-referrer"
+                              className="w-20 h-12 object-cover rounded-lg border border-zinc-700 flex-shrink-0"
+                            />
+                            <div className="text-[11px] text-zinc-400">
+                              <p className="text-white font-medium">Cover Preview</p>
+                              <p className="truncate max-w-sm text-zinc-500 font-mono">{mediaEditForm.thumbnail}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
@@ -1525,6 +2338,9 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                   );
                 }
 
+                const isUploadItem = activeMediaPlatform === 'uploads';
+                const isVideo = item.type === 'video' || item.mediaType === 'video';
+
                 return (
                   <div
                     key={item.id}
@@ -1533,37 +2349,84 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                     <div className="flex items-center gap-3">
                       <div className="w-16 h-12 rounded-xl overflow-hidden bg-zinc-950 flex-shrink-0 relative border border-zinc-800">
                         <img
-                          src={item.thumbnail}
+                          src={item.thumbnail || item.mediaUrl || item.imageUrl || 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=600&auto=format&fit=crop'}
                           alt={item.title}
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
+                        {isVideo && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <Play className="w-4 h-4 text-white fill-white" />
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-0.5">
-                        <h4 className="text-sm font-bold text-white line-clamp-1">{item.title}</h4>
-                        <p className="text-xs text-zinc-400 line-clamp-1">{item.description}</p>
-                        <div className="text-[11px] text-zinc-500 font-mono flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-bold text-white line-clamp-1">{item.title}</h4>
+                          {isUploadItem && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                              isVideo ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {isVideo ? 'VIDEO' : 'PHOTO'}
+                            </span>
+                          )}
+                          {isUploadItem && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1 font-mono">
+                              <Database className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>DB Stored</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-400 line-clamp-1">{item.description || item.caption}</p>
+                        <div className="text-[11px] text-zinc-500 font-mono flex items-center gap-2 flex-wrap">
                           <span className="text-amber-400">{item.category}</span>
                           <span>•</span>
-                          <span className="truncate max-w-[200px] sm:max-w-xs">{item.url}</span>
+                          <span>{item.date}</span>
+                          {item.fileName && (
+                            <>
+                              <span>•</span>
+                              <span className="truncate max-w-[140px] text-zinc-400">{item.fileName}</span>
+                            </>
+                          )}
+                          {item.fileSize && (
+                            <>
+                              <span>•</span>
+                              <span className="text-zinc-500">{item.fileSize}</span>
+                            </>
+                          )}
+                          {item.location && (
+                            <>
+                              <span>•</span>
+                              <span className="text-zinc-400">{item.location}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-1.5 rounded-xl bg-zinc-800 text-zinc-300 hover:text-white"
-                        title="Preview Link"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                      {((item as any).postUrl || item.url || item.videoUrl || item.mediaUrl) && (
+                        <a
+                          href={(item as any).postUrl || item.url || item.videoUrl || item.mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1.5 rounded-xl bg-zinc-800 text-zinc-300 hover:text-white"
+                          title="Preview Link"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
 
                       <button
                         type="button"
-                        onClick={() => handleStartEditMedia(item)}
+                        onClick={() => {
+                          if (isUploadItem) {
+                            setEditingUploadedItem(item);
+                            setIsMediaUploadModalOpen(true);
+                          } else {
+                            handleStartEditMedia(item);
+                          }
+                        }}
                         className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-amber-500 hover:text-black text-zinc-300 cursor-pointer text-xs font-bold transition-all flex items-center gap-1"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -1573,13 +2436,20 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm(`Delete media item "${item.title}"?`)) {
-                            onDeleteMediaItem(activeMediaPlatform, item.id);
-                            triggerToast('Media item deleted.');
+                          if (isUploadItem) {
+                            if (confirm(`Delete uploaded media "${item.title}" from database?`)) {
+                              onDeleteUploadedMedia?.(item.id);
+                              triggerToast(`Media "${item.title}" deleted from database.`);
+                            }
+                          } else {
+                            if (confirm(`Delete media item "${item.title}"?`)) {
+                              onDeleteMediaItem(activeMediaPlatform, item.id);
+                              triggerToast('Media item deleted.');
+                            }
                           }
                         }}
                         className="p-1.5 rounded-xl bg-zinc-800 hover:bg-red-950 text-zinc-400 hover:text-red-400 cursor-pointer transition-colors"
-                        title="Delete Media Link"
+                        title="Delete Media"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -2027,6 +2897,71 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
           </div>
         </form>
       )}
+
+      {/* Device Media Upload & Edit Modal for PC / Mobile Files */}
+      <MediaUploadModal
+        isOpen={isMediaUploadModalOpen}
+        onClose={() => {
+          setIsMediaUploadModalOpen(false);
+          setEditingUploadedItem(null);
+        }}
+        defaultType={mediaUploadDefaultType}
+        editItem={editingUploadedItem}
+        autoSave={true}
+        onSave={async (item, blob) => {
+          if (editingUploadedItem) {
+            if (onUpdateUploadedMedia) {
+              await onUpdateUploadedMedia(item, blob);
+            }
+            triggerToast(`Media "${item.title}" updated in database!`);
+          } else {
+            if (onAddUploadedMedia) {
+              await onAddUploadedMedia(item, blob);
+            }
+            // If active tab is photos, also add to the photo gallery collection
+            if (activeTab === 'photos') {
+              onAddPhoto({
+                id: item.id,
+                title: item.title,
+                caption: item.description || item.caption || '',
+                imageUrl: item.imageUrl || item.thumbnail || item.mediaUrl || '',
+                eventTag: item.location || item.category || 'Lubiri Ring Road',
+                category: item.category === 'Training Clinics' ? 'Training' : 'Races',
+                date: item.date || new Date().toLocaleDateString('en-GB'),
+              });
+              triggerToast(`Photo "${item.title}" automatically saved to Gallery & Cloud Database!`);
+            } else {
+              triggerToast(`Media "${item.title}" automatically saved to database!`);
+            }
+          }
+        }}
+        onSaveMedia={async (item, blob) => {
+          if (editingUploadedItem) {
+            if (onUpdateUploadedMedia) {
+              await onUpdateUploadedMedia(item, blob);
+            }
+            triggerToast(`Media "${item.title}" updated in database!`);
+          } else {
+            if (onAddUploadedMedia) {
+              await onAddUploadedMedia(item, blob);
+            }
+            if (activeTab === 'photos') {
+              onAddPhoto({
+                id: item.id,
+                title: item.title,
+                caption: item.description || item.caption || '',
+                imageUrl: item.imageUrl || item.thumbnail || item.mediaUrl || '',
+                eventTag: item.location || item.category || 'Lubiri Ring Road',
+                category: item.category === 'Training Clinics' ? 'Training' : 'Races',
+                date: item.date || new Date().toLocaleDateString('en-GB'),
+              });
+              triggerToast(`Photo "${item.title}" automatically saved to Gallery & Cloud Database!`);
+            } else {
+              triggerToast(`Media "${item.title}" automatically saved to database!`);
+            }
+          }
+        }}
+      />
     </div>
   );
 };

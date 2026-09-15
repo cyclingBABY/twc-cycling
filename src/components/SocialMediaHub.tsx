@@ -10,28 +10,31 @@ import {
   TikTokItem,
   InstagramItem,
   extractYouTubeId,
+  extractTikTokInfo,
 } from '../data/cyclingData';
+import { SocialMediaItem } from '../types';
 import {
   Youtube,
   Instagram,
   Play,
   Heart,
   MessageCircle,
-  Eye,
   Share2,
   ExternalLink,
   Sparkles,
-  Tv,
-  Film,
-  RefreshCw,
-  CheckCircle2,
   X,
-  Volume2,
-  Search,
   Check,
   Radio,
-  SlidersHorizontal,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  MapPin,
+  Calendar,
+  Eye,
+  Film,
+  Maximize2,
 } from 'lucide-react';
+
+import { TikTokUserReelCard } from './TikTokUserReelCard';
 
 // Custom TikTok icon
 const TikTokIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
@@ -44,47 +47,22 @@ interface SocialMediaHubProps {
   youtubeVideos?: MediaVideoItem[];
   tiktokReels?: TikTokItem[];
   instagramPosts?: InstagramItem[];
-  onOpenAdmin?: () => void;
+  uploadedMedia?: SocialMediaItem[];
+  onUpdateTikTokReel?: (reel: TikTokItem) => void;
 }
 
 export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
   youtubeVideos = YOUTUBE_MEDIA,
   tiktokReels = TIKTOK_MEDIA,
   instagramPosts = INSTAGRAM_MEDIA,
-  onOpenAdmin,
+  uploadedMedia = [],
+  onUpdateTikTokReel,
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'youtube' | 'tiktok' | 'instagram'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'uploads' | 'youtube' | 'tiktok' | 'instagram'>('all');
   const [activeVideoModal, setActiveVideoModal] = useState<MediaVideoItem | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
-  const [customUrlInput, setCustomUrlInput] = useState('');
-  const [previewEmbedUrl, setPreviewEmbedUrl] = useState<string | null>(null);
+  const [activeTikTokModal, setActiveTikTokModal] = useState<TikTokItem | null>(null);
+  const [activeUploadedMediaModal, setActiveUploadedMediaModal] = useState<SocialMediaItem | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
-
-  const handleSyncFeed = () => {
-    setIsSyncing(true);
-    setSyncStatus('Connecting to YouTube Channel UCcyYTjupx6KfAfe-ON_Wqlg & feeds...');
-    setTimeout(() => {
-      setSyncStatus('Verified: 49+ official videos, 362+ subscribers, TikTok @togetherwecancyclingug & Instagram feeds synced!');
-      setIsSyncing(false);
-      setTimeout(() => setSyncStatus(null), 6000);
-    }, 1200);
-  };
-
-  const handleCustomUrlSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customUrlInput.trim()) return;
-
-    // Detect YouTube URL
-    const ytMatch = customUrlInput.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    if (ytMatch && ytMatch[1]) {
-      setPreviewEmbedUrl(`https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1`);
-      return;
-    }
-
-    // Default open in new tab if direct URL
-    window.open(customUrlInput, '_blank');
-  };
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -96,6 +74,12 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
     if (video.videoUrl && video.videoUrl.trim()) {
       return video.videoUrl.trim();
     }
+    if ((video as any).url && (video as any).url.trim()) {
+      return (video as any).url.trim();
+    }
+    if ((video as any).mediaUrl && (video as any).mediaUrl.trim()) {
+      return (video as any).mediaUrl.trim();
+    }
     if (video.youtubeId) {
       return `https://www.youtube.com/watch?v=${video.youtubeId}`;
     }
@@ -104,124 +88,91 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
 
   return (
     <section id="media" className="py-20 sm:py-28 bg-zinc-950 text-zinc-100 relative overflow-hidden border-t border-zinc-800/80">
-      {/* Background neon/safety athletic atmospheric glow */}
+      {/* Neon/athletic atmospheric glow */}
       <div className="absolute top-1/4 -right-40 w-96 h-96 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 -left-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-12">
-        {/* Top section header & sync bar */}
+        {/* Top section header with official social links */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold uppercase tracking-wider font-heading mb-3">
               <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
-              <span>Official Media & Content Fetcher</span>
+              <span>Official Media & Content Vault</span>
             </div>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white font-heading tracking-tight">
               TWC Cycling in Real Motion
             </h2>
             <p className="mt-3 text-zinc-400 text-sm sm:text-base leading-relaxed max-w-2xl">
-              Authentic race footage, school championships, and training clinics fetched from TWC Cycling Uganda's official YouTube channel, TikTok, and Instagram accounts.
+              Authentic race footage, team media archives, and official broadcasts from Together We Can Cycling Uganda.
             </p>
           </div>
 
-          {/* Sync & Direct Feed Buttons */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-300 text-xs font-bold font-heading transition-all shadow-md cursor-pointer"
-                title="Manage YouTube, TikTok & Instagram Media (code5)"
-              >
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>code5 Admin</span>
-              </button>
-            )}
-
-            <button
-              onClick={handleSyncFeed}
-              disabled={isSyncing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-bold font-heading transition-all shadow-md cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Live Feeds'}</span>
-            </button>
-
+          {/* Clean Official Channels Bar */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <a
               href={YOUTUBE_CHANNEL.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold font-heading transition-all shadow-lg shadow-red-600/20"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold font-heading transition-all shadow-md shadow-red-600/20"
             >
               <Youtube className="w-4 h-4" />
-              <span>YouTube: {YOUTUBE_CHANNEL.id}</span>
+              <span>YouTube Channel</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+
+            <a
+              href={TIKTOK_ACCOUNT.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold font-heading transition-all shadow-md"
+            >
+              <TikTokIcon className="w-4 h-4 text-cyan-400" />
+              <span>TikTok</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+
+            <a
+              href={INSTAGRAM_ACCOUNT.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-pink-500/30 text-pink-300 hover:text-white text-xs font-bold font-heading transition-all shadow-md"
+            >
+              <Instagram className="w-4 h-4 text-pink-400" />
+              <span>Instagram</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
         </div>
 
-        {/* Live sync notification toast */}
-        {syncStatus && (
-          <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="font-mono font-medium">{syncStatus}</span>
-          </div>
-        )}
-
-        {/* Quick URL Fetcher / Embed Bar */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 backdrop-blur-md">
-          <form onSubmit={handleCustomUrlSubmit} className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="relative flex-1 w-full">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={customUrlInput}
-                onChange={(e) => setCustomUrlInput(e.target.value)}
-                placeholder="Paste any YouTube or TikTok video link (e.g. https://www.youtube.com/watch?v=...)"
-                className="w-full pl-10 pr-4 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-heading font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-colors"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Fetch & Play Link</span>
-            </button>
-          </form>
-
-          {previewEmbedUrl && (
-            <div className="mt-4 pt-4 border-t border-zinc-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-400 uppercase font-heading">
-                  Live Custom Embedded Player
-                </span>
-                <button
-                  onClick={() => setPreviewEmbedUrl(null)}
-                  className="text-xs text-zinc-400 hover:text-white"
-                >
-                  Close Player
-                </button>
-              </div>
-              <div className="relative aspect-video rounded-xl overflow-hidden bg-black border border-amber-500/50">
-                <iframe
-                  src={previewEmbedUrl}
-                  title="TWC Custom Media Player"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="w-full h-full border-0"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Interactive Platform Filter Tabs */}
+        {/* Interactive Filter Tabs */}
         <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-4 overflow-x-auto">
           {[
-            { id: 'all', label: 'All Verified Content', icon: <Sparkles className="w-4 h-4" /> },
-            { id: 'youtube', label: `YouTube Official (${youtubeVideos.length})`, icon: <Youtube className="w-4 h-4 text-red-500" /> },
-            { id: 'tiktok', label: `TikTok Reels (${tiktokReels.length})`, icon: <TikTokIcon className="w-4 h-4 text-cyan-400" /> },
-            { id: 'instagram', label: `Instagram Gallery (${instagramPosts.length})`, icon: <Instagram className="w-4 h-4 text-pink-400" /> },
+            { id: 'all', label: 'All Media', icon: <Sparkles className="w-4 h-4" /> },
+            ...(uploadedMedia.length > 0
+              ? [
+                  {
+                    id: 'uploads',
+                    label: `Team Vault (${uploadedMedia.length})`,
+                    icon: <Film className="w-4 h-4 text-amber-400" />,
+                  },
+                ]
+              : []),
+            {
+              id: 'youtube',
+              label: `YouTube Official (${youtubeVideos.length})`,
+              icon: <Youtube className="w-4 h-4 text-red-500" />,
+            },
+            {
+              id: 'tiktok',
+              label: `TikTok Reels (${tiktokReels.length})`,
+              icon: <TikTokIcon className="w-4 h-4 text-cyan-400" />,
+            },
+            {
+              id: 'instagram',
+              label: `Instagram Gallery (${instagramPosts.length})`,
+              icon: <Instagram className="w-4 h-4 text-pink-400" />,
+            },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -238,7 +189,132 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
           ))}
         </div>
 
-        {/* 1. YOUTUBE SECTION (Fetched from UCcyYTjupx6KfAfe-ON_Wqlg) */}
+        {/* ========================================================================= */}
+        {/* 1. TEAM UPLOADS / VAULT (Photos and Videos) */}
+        {/* ========================================================================= */}
+        {(activeTab === 'all' || activeTab === 'uploads') && uploadedMedia.length > 0 && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <h3 className="text-lg sm:text-xl font-extrabold text-white font-heading tracking-tight">
+                  Team Vault & Race Media
+                </h3>
+              </div>
+              <span className="text-xs text-zinc-400 font-mono">
+                {uploadedMedia.length} {uploadedMedia.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {uploadedMedia.map((item) => {
+                const isVideo = item.type === 'video' || !!item.videoUrl;
+                const displayThumbnail =
+                  item.thumbnail ||
+                  item.imageUrl ||
+                  item.mediaUrl ||
+                  'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=800&auto=format&fit=crop';
+
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-zinc-900/90 rounded-3xl border border-zinc-800/90 overflow-hidden hover:border-amber-500/60 transition-all group flex flex-col justify-between shadow-lg hover:shadow-2xl"
+                  >
+                    {/* Media Header / Image Box */}
+                    <div className="relative aspect-video overflow-hidden bg-zinc-950">
+                      <img
+                        src={displayThumbnail}
+                        alt={item.title || 'TWC Media'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+
+                      {/* Top Badges */}
+                      <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                        <span
+                          className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-lg backdrop-blur-md flex items-center gap-1 shadow-md ${
+                            isVideo
+                              ? 'bg-amber-500 text-black'
+                              : 'bg-emerald-500 text-black'
+                          }`}
+                        >
+                          {isVideo ? <VideoIcon className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
+                          <span>{isVideo ? 'Video' : 'Photo'}</span>
+                        </span>
+                      </div>
+
+                      {/* Top Right Duration */}
+                      {item.duration && (
+                        <div className="absolute top-3 right-3 text-[10px] font-mono font-bold bg-black/80 text-amber-400 px-2 py-0.5 rounded border border-zinc-800 backdrop-blur-md">
+                          {item.duration}
+                        </div>
+                      )}
+
+                      {/* Click overlay to play/view */}
+                      <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                        <button
+                          onClick={() => setActiveUploadedMediaModal(item)}
+                          className="w-12 h-12 rounded-full bg-amber-500 hover:bg-amber-400 text-black flex items-center justify-center shadow-xl shadow-amber-500/40 group-hover:scale-110 transition-transform cursor-pointer"
+                          title={isVideo ? 'Play Video' : 'View Full Photo'}
+                        >
+                          {isVideo ? (
+                            <Play className="w-5 h-5 ml-0.5 fill-current" />
+                          ) : (
+                            <Maximize2 className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content Body */}
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 mb-1.5">
+                          <span className="text-amber-400 font-bold uppercase">{item.category}</span>
+                          {item.date && <span>{item.date}</span>}
+                        </div>
+
+                        <h4 className="text-base font-bold text-white font-heading leading-snug line-clamp-2">
+                          {item.title}
+                        </h4>
+
+                        <p className="text-xs text-zinc-400 mt-2 line-clamp-2 leading-relaxed">
+                          {item.caption || item.description || 'TWC Cycling Uganda team archive.'}
+                        </p>
+                      </div>
+
+                      {/* Location & View Button */}
+                      <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-xs">
+                        {item.location ? (
+                          <div className="flex items-center gap-1.5 text-zinc-400 text-[11px] truncate max-w-[180px]">
+                            <MapPin className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                            <span className="truncate">{item.location}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-zinc-500 font-mono">
+                            {item.fileName || 'TWC Media'}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setActiveUploadedMediaModal(item)}
+                          className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{isVideo ? 'Play Video' : 'View High-Res'}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 2. YOUTUBE SECTION (UCcyYTjupx6KfAfe-ON_Wqlg) */}
+        {/* ========================================================================= */}
         {(activeTab === 'all' || activeTab === 'youtube') && (
           <div className="space-y-6">
             <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-red-950/30 via-zinc-900 to-zinc-950 border border-red-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -281,7 +357,7 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
               </div>
             </div>
 
-            {/* YouTube Video Grid - Real Verified Videos */}
+            {/* YouTube Video Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {youtubeVideos.map((video) => (
                 <div
@@ -298,23 +374,22 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
                       <button
                         onClick={() => setActiveVideoModal(video)}
                         className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl shadow-red-600/50 group-hover:scale-110 transition-transform cursor-pointer"
-                        aria-label={`Play ${video.title}`}
+                        aria-label="Play YouTube video"
                       >
                         <Play className="w-5 h-5 ml-0.5 fill-current" />
                       </button>
                     </div>
-                    {/* Duration badge */}
-                    <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+                    <div className="absolute bottom-2.5 right-2.5 bg-black/80 text-white text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-800">
                       {video.duration}
-                    </span>
-                    <span className="absolute top-2 left-2 bg-zinc-900/90 text-amber-400 text-[10px] font-heading font-bold px-2 py-0.5 rounded border border-zinc-700">
+                    </div>
+                    <div className="absolute top-2.5 left-2.5 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow">
                       {video.category}
-                    </span>
+                    </div>
                   </div>
 
-                  <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                  <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
                     <div>
-                      <h4 className="text-sm font-bold text-white font-heading line-clamp-2 group-hover:text-amber-300 transition-colors">
+                      <h4 className="text-base font-bold text-white font-heading line-clamp-2 leading-snug">
                         {video.title}
                       </h4>
                       <p className="text-xs text-zinc-400 mt-2 line-clamp-2 leading-relaxed">
@@ -322,12 +397,19 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
                       </p>
                     </div>
 
-                    <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-400">
-                      <span>{video.views}</span>
+                    <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                      <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <Eye className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>{video.views}</span>
+                        <span>•</span>
+                        <span>{video.uploadDate}</span>
+                      </div>
+
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => copyToClipboard(getYouTubeLink(video), video.id)}
-                          className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800"
+                          className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
                           title="Copy Video Link"
                         >
                           {copiedLink === video.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
@@ -336,9 +418,9 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
                           href={getYouTubeLink(video)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 hover:underline"
+                          className="text-red-400 hover:text-red-300 text-xs font-semibold flex items-center gap-1 hover:underline"
                         >
-                          <span>Watch on YT</span>
+                          <span>YouTube</span>
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       </div>
@@ -350,24 +432,32 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
           </div>
         )}
 
-        {/* 2. TIKTOK SECTION (Fetched from @togetherwecancyclingug) */}
+        {/* ========================================================================= */}
+        {/* 3. TIKTOK SECTION */}
+        {/* ========================================================================= */}
         {(activeTab === 'all' || activeTab === 'tiktok') && (
-          <div className="space-y-6 pt-4">
-            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border border-cyan-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-6">
+            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-cyan-950/30 via-zinc-900 to-zinc-950 border border-cyan-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-cyan-400 flex-shrink-0 shadow-lg shadow-cyan-500/10">
+                <div className="w-14 h-14 rounded-2xl bg-cyan-500 flex items-center justify-center text-black flex-shrink-0 shadow-lg shadow-cyan-500/30">
                   <TikTokIcon className="w-8 h-8" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
-                      TikTok: {TIKTOK_ACCOUNT.handle}
+                      {TIKTOK_ACCOUNT.name}
                     </h3>
                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40">
-                      Verified Account
+                      {TIKTOK_ACCOUNT.handle}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 text-cyan-300">
+                      {TIKTOK_ACCOUNT.followers}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                      {TIKTOK_ACCOUNT.likes}
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-zinc-300 mt-1 max-w-2xl leading-relaxed">
+                  <p className="text-xs sm:text-sm text-zinc-300 mt-2 max-w-2xl leading-relaxed">
                     {TIKTOK_ACCOUNT.bio}
                   </p>
                 </div>
@@ -378,93 +468,91 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
                   href={TIKTOK_ACCOUNT.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-heading font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
+                  className="px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-heading font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
                 >
-                  <TikTokIcon className="w-4 h-4 text-black" />
+                  <TikTokIcon className="w-4 h-4" />
                   <span>Follow @togetherwecancyclingug</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-black" />
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
             </div>
 
-            {/* Vertical TikTok Cards Grid (9:14 aspect ratio) */}
+            {/* TikTok Reels Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {tiktokReels.map((reel) => (
                 <div
                   key={reel.id}
-                  className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-cyan-500/60 transition-all group flex flex-col justify-between"
+                  className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden hover:border-cyan-500/50 transition-all group flex flex-col justify-between"
                 >
-                  <div className="relative aspect-[9/14] overflow-hidden bg-zinc-950">
+                  <div className="relative aspect-[9/16] overflow-hidden bg-zinc-950">
                     <img
                       src={reel.thumbnail}
                       alt={reel.caption}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
 
-                    {/* Top platform badge */}
-                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-cyan-300 border border-cyan-500/40">
-                        {reel.tag}
-                      </span>
-                      <span className="p-1.5 rounded-full bg-black/60 text-white backdrop-blur-md">
-                        <TikTokIcon className="w-3.5 h-3.5" />
-                      </span>
+                    {/* Play Video / Preview Button Overlay */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTikTokModal(reel)}
+                        className="w-14 h-14 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-xl shadow-cyan-500/50 transform scale-90 group-hover:scale-100 transition-all cursor-pointer"
+                        title="Preview TikTok Video"
+                        aria-label="Preview TikTok video"
+                      >
+                        <Play className="w-6 h-6 ml-0.5 fill-current" />
+                      </button>
                     </div>
 
-                    {/* Center Play Icon Hover */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="w-12 h-12 rounded-full bg-cyan-400 text-black flex items-center justify-center shadow-xl">
-                        <Play className="w-5 h-5 ml-0.5 fill-current" />
-                      </div>
+                    <div className="absolute top-2.5 left-2.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-800 flex items-center gap-1 z-10">
+                      <TikTokIcon className="w-3 h-3 text-cyan-400" />
+                      <span>{reel.views}</span>
                     </div>
 
-                    {/* Bottom overlay info */}
-                    <div className="absolute bottom-3 left-3 right-3 space-y-2">
-                      <div className="flex items-center gap-3 text-xs text-zinc-200 font-bold font-mono">
-                        <span className="flex items-center gap-1">
-                          <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                          {reel.views}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Heart className="w-3.5 h-3.5 text-pink-400 fill-pink-400" />
-                          {reel.likes}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MessageCircle className="w-3.5 h-3.5 text-amber-400" />
-                          {reel.comments}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-white line-clamp-3 leading-snug font-medium">
+                    <div className="absolute bottom-3 left-3 right-3 space-y-2 z-10">
+                      <p className="text-xs text-white font-medium line-clamp-3 leading-snug">
                         {reel.caption}
                       </p>
-
-                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 truncate pt-1 border-t border-zinc-800/80">
-                        <Volume2 className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-                        <span className="truncate">{reel.audioTrack}</span>
+                      <div className="text-[10px] text-zinc-400 font-mono flex items-center justify-between pt-1 border-t border-white/10">
+                        <span className="flex items-center gap-1 text-cyan-300">
+                          <Heart className="w-3 h-3 fill-current" />
+                          {reel.likes}
+                        </span>
+                        <span className="truncate max-w-[120px] text-zinc-300">{reel.audioTrack}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-xs font-bold">
+                  <div className="p-3 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-xs">
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(reel.videoUrl, reel.id)}
-                      className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
-                      title="Copy TikTok Link"
+                      onClick={() => setActiveTikTokModal(reel)}
+                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
                     >
-                      {copiedLink === reel.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+                      <Play className="w-3 h-3 fill-current" />
+                      <span>Preview Video</span>
                     </button>
-                    <a
-                      href={reel.videoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-cyan-400 hover:text-cyan-300 flex items-center justify-center gap-1.5 transition-colors hover:underline"
-                    >
-                      <span>Watch on TikTok</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(reel.videoUrl || reel.url || '', reel.id)}
+                        className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Copy TikTok Link"
+                      >
+                        {copiedLink === reel.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+                      </button>
+                      <a
+                        href={reel.videoUrl || reel.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-zinc-400 hover:text-cyan-300 text-xs font-semibold flex items-center gap-1 hover:underline"
+                      >
+                        <span>TikTok</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -472,24 +560,29 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
           </div>
         )}
 
-        {/* 3. INSTAGRAM SECTION (Fetched from @togetherwecancyclingug) */}
+        {/* ========================================================================= */}
+        {/* 4. INSTAGRAM SECTION */}
+        {/* ========================================================================= */}
         {(activeTab === 'all' || activeTab === 'instagram') && (
-          <div className="space-y-6 pt-4">
-            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-purple-950/30 via-zinc-900 to-pink-950/30 border border-pink-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-6">
+            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-pink-950/30 via-zinc-900 to-zinc-950 border border-pink-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-700 flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-pink-600/20">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-pink-600/30">
                   <Instagram className="w-8 h-8" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
-                      Instagram: {INSTAGRAM_ACCOUNT.handle}
+                      {INSTAGRAM_ACCOUNT.name}
                     </h3>
                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-pink-500/20 text-pink-400 border border-pink-500/40">
-                      Official Feed
+                      {INSTAGRAM_ACCOUNT.handle}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 text-pink-300">
+                      {INSTAGRAM_ACCOUNT.followers}
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-zinc-300 mt-1 max-w-2xl leading-relaxed">
+                  <p className="text-xs sm:text-sm text-zinc-300 mt-2 max-w-2xl leading-relaxed">
                     {INSTAGRAM_ACCOUNT.bio}
                   </p>
                 </div>
@@ -559,7 +652,7 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
                         <button
                           type="button"
                           onClick={() => copyToClipboard(post.postUrl, post.id)}
-                          className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
+                          className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
                           title="Copy Instagram Link"
                         >
                           {copiedLink === post.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
@@ -583,7 +676,161 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
         )}
       </div>
 
-      {/* Video Modal with Embedded Direct YouTube Player */}
+      {/* ========================================================================= */}
+      {/* MODAL 1: Uploaded Device Media Player & Lightbox */}
+      {/* ========================================================================= */}
+      {activeUploadedMediaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/95 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border-2 border-amber-500/80 max-w-4xl w-full rounded-3xl overflow-hidden shadow-2xl relative text-zinc-100 flex flex-col max-h-[92vh]">
+            <button
+              onClick={() => setActiveUploadedMediaModal(null)}
+              className="absolute top-4 right-4 z-20 p-2 text-zinc-400 hover:text-white rounded-full bg-black/80 hover:bg-black cursor-pointer shadow-lg transition-colors"
+              aria-label="Close media modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Media Player / Image Viewer Container */}
+            <div className="relative bg-black flex items-center justify-center max-h-[60vh] overflow-hidden">
+              {(() => {
+                const videoSource =
+                  activeUploadedMediaModal.mediaUrl ||
+                  activeUploadedMediaModal.videoUrl ||
+                  activeUploadedMediaModal.url;
+                const ytId =
+                  activeUploadedMediaModal.youtubeId ||
+                  extractYouTubeId(videoSource);
+
+                if (ytId) {
+                  return (
+                    <div className="w-full aspect-video max-h-[60vh]">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`}
+                        title={activeUploadedMediaModal.title || 'YouTube Video'}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    </div>
+                  );
+                }
+
+                if (activeUploadedMediaModal.type === 'video' || activeUploadedMediaModal.videoUrl) {
+                  return (
+                    <video
+                      src={videoSource}
+                      controls
+                      autoPlay
+                      playsInline
+                      poster={activeUploadedMediaModal.thumbnail}
+                      className="max-h-[60vh] w-full object-contain mx-auto"
+                    />
+                  );
+                }
+
+                return (
+                  <img
+                    src={
+                      activeUploadedMediaModal.imageUrl ||
+                      activeUploadedMediaModal.thumbnail ||
+                      activeUploadedMediaModal.mediaUrl
+                    }
+                    alt={activeUploadedMediaModal.title || 'Media Photo'}
+                    referrerPolicy="no-referrer"
+                    className="max-h-[60vh] w-auto object-contain mx-auto"
+                  />
+                );
+              })()}
+            </div>
+
+            {/* Details Footer */}
+            <div className="p-6 space-y-4 bg-zinc-900 overflow-y-auto">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase font-heading">
+                      {activeUploadedMediaModal.category || 'TWC Media'}
+                    </span>
+                    <span className="text-xs font-mono text-zinc-400">
+                      {activeUploadedMediaModal.type === 'video' ? 'Race Video' : 'Photo Gallery'}
+                    </span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-extrabold text-white font-heading mt-2">
+                    {activeUploadedMediaModal.title}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const videoSource =
+                      activeUploadedMediaModal.mediaUrl ||
+                      activeUploadedMediaModal.videoUrl ||
+                      activeUploadedMediaModal.url;
+                    const ytId =
+                      activeUploadedMediaModal.youtubeId ||
+                      extractYouTubeId(videoSource);
+
+                    if (ytId) {
+                      return (
+                        <a
+                          href={`https://www.youtube.com/watch?v=${ytId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-colors shadow-lg shadow-red-600/20"
+                        >
+                          <Youtube className="w-3.5 h-3.5" />
+                          <span>Watch on YouTube</span>
+                          <ExternalLink className="w-3 h-3 ml-0.5" />
+                        </a>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  <button
+                    onClick={() => setActiveUploadedMediaModal(null)}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+                {activeUploadedMediaModal.caption || activeUploadedMediaModal.description}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400 font-mono pt-2 border-t border-zinc-800/80">
+                {activeUploadedMediaModal.location && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                    {activeUploadedMediaModal.location}
+                  </span>
+                )}
+                {activeUploadedMediaModal.date && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                    {activeUploadedMediaModal.date}
+                  </span>
+                )}
+                {activeUploadedMediaModal.author && (
+                  <span>By {activeUploadedMediaModal.author}</span>
+                )}
+                {activeUploadedMediaModal.fileName && (
+                  <span className="text-zinc-500">File: {activeUploadedMediaModal.fileName}</span>
+                )}
+                {activeUploadedMediaModal.fileSize && (
+                  <span className="text-zinc-500">({activeUploadedMediaModal.fileSize})</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: YouTube Video Player Modal */}
+      {/* ========================================================================= */}
       {activeVideoModal && (() => {
         const activeVideoLink = getYouTubeLink(activeVideoModal);
         const ytId = extractYouTubeId(activeVideoLink) || activeVideoModal.youtubeId;
@@ -683,6 +930,106 @@ export const SocialMediaHub: React.FC<SocialMediaHubProps> = ({
                   >
                     Close
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: TikTok Video Player & Live Preview Modal */}
+      {/* ========================================================================= */}
+      {activeTikTokModal && (() => {
+        const rawUrl = activeTikTokModal.videoUrl || activeTikTokModal.url || '';
+        const ttInfo = extractTikTokInfo(rawUrl);
+        const videoId = activeTikTokModal.embedId || ttInfo.videoId;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/95 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-zinc-950 border-2 border-cyan-500/80 max-w-md w-full rounded-3xl overflow-hidden shadow-2xl relative text-zinc-100 flex flex-col max-h-[92vh]">
+              <button
+                onClick={() => setActiveTikTokModal(null)}
+                className="absolute top-4 right-4 z-20 p-2 text-zinc-400 hover:text-white rounded-full bg-black/80 hover:bg-black cursor-pointer shadow-lg transition-colors"
+                aria-label="Close TikTok player"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Player / Embedded View from the provided video link */}
+              <div className="relative aspect-[9/16] bg-black max-h-[62vh] flex items-center justify-center overflow-hidden">
+                {videoId ? (
+                  <iframe
+                    src={`https://www.tiktok.com/embed/v2/${videoId}`}
+                    title={activeTikTokModal.caption || 'TikTok Video Player'}
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="relative w-full h-full flex flex-col items-center justify-center">
+                    <img
+                      src={activeTikTokModal.thumbnail}
+                      alt={activeTikTokModal.caption}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover opacity-60"
+                    />
+                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center p-6 text-center space-y-4">
+                      <a
+                        href={rawUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-16 h-16 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-xl hover:scale-110 transition-transform cursor-pointer"
+                      >
+                        <Play className="w-8 h-8 ml-1 fill-current" />
+                      </a>
+                      <div>
+                        <h4 className="text-base font-bold text-white font-heading">
+                          Watch on TikTok
+                        </h4>
+                        <p className="text-xs text-zinc-300 mt-1">
+                          Click to play full reel directly on TikTok
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Details and Links */}
+              <div className="p-5 space-y-3 bg-zinc-900 border-t border-zinc-800">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 uppercase font-heading">
+                      {activeTikTokModal.category || 'TikTok Reel'}
+                    </span>
+                    {videoId && (
+                      <span className="text-[10px] font-mono text-zinc-400">ID: {videoId}</span>
+                    )}
+                  </div>
+                  <a
+                    href={rawUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-bold transition-colors shadow-md"
+                  >
+                    <span>Open in TikTok</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <p className="text-xs text-zinc-200 leading-relaxed line-clamp-3">
+                  {activeTikTokModal.caption || activeTikTokModal.title}
+                </p>
+
+                <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pt-1 border-t border-zinc-800/80">
+                  <span className="flex items-center gap-1 text-cyan-300">
+                    <Heart className="w-3.5 h-3.5 fill-current" />
+                    {activeTikTokModal.likes} likes
+                  </span>
+                  <span className="truncate max-w-[150px] text-zinc-300">
+                    {activeTikTokModal.audioTrack || 'Original Sound'}
+                  </span>
                 </div>
               </div>
             </div>

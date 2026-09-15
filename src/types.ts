@@ -166,6 +166,7 @@ export interface GalleryPhotoItem {
   caption: string;
   eventTag: string;
   date: string;
+  category?: string;
 }
 
 // Security & Audit Log
@@ -179,14 +180,21 @@ export interface AuditLogEntry {
   module: 'events' | 'crm' | 'financials' | 'cms' | 'media' | 'security';
 }
 
-// Social Media Item for CMS Link Editor
+// Social Media & Uploaded Media Item for CMS and Public Hub
 export interface SocialMediaItem {
   id: string;
   title?: string;
   caption?: string;
+  type?: 'video' | 'photo';
+  mediaType?: 'upload' | 'youtube' | 'tiktok' | 'instagram' | 'external';
+  sourceType?: 'device_upload' | 'social_link' | 'youtube' | 'tiktok' | 'instagram' | string;
   videoUrl?: string;
   postUrl?: string;
   url?: string;
+  mediaUrl?: string;
+  fileData?: string;
+  fileName?: string;
+  fileSize?: string;
   embedId?: string;
   author?: string;
   youtubeId?: string;
@@ -213,5 +221,44 @@ export interface SiteContentSettings {
   heroHeadline: string;
   heroSubtitle: string;
   contactEmail: string;
+}
+
+export interface TikTokItem {
+  id: string;
+  caption: string;
+  likes: string;
+  views: string;
+  comments: string;
+  audioTrack: string;
+  thumbnail: string;
+  videoUrl: string;
+  tag: string;
+  category?: string;
+  title?: string;
+  url?: string;
+  mediaUrl?: string;
+  embedId?: string;
+  duration?: string;
+  date?: string;
+}
+
+export interface InstagramItem {
+  id: string;
+  caption: string;
+  likes: string;
+  comments: string;
+  date: string;
+  imageUrl: string;
+  postUrl: string;
+  location: string;
+  tag: string;
+  category?: string;
+  title?: string;
+  url?: string;
+  thumbnail?: string;
+  videoUrl?: string;
+  mediaUrl?: string;
+  shortcode?: string;
+  embedId?: string;
 }
 

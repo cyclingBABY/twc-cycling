@@ -8,6 +8,8 @@ interface AdminHeaderProps {
   onClose: () => void;
   onLogout: () => void;
   activeModuleTitle: string;
+  dbStatus?: 'connected' | 'offline' | 'connecting' | 'error';
+  onOpenDatabaseSync?: () => void;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
@@ -16,6 +18,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onClose,
   onLogout,
   activeModuleTitle,
+  dbStatus = 'connected',
+  onOpenDatabaseSync,
 }) => {
   const roleBadges: Record<
     AdminRole,
@@ -67,6 +71,18 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
       {/* RBAC Role Switcher & Actions */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Cloud Firestore Status Indicator */}
+        <button
+          onClick={onOpenDatabaseSync}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/40 text-xs font-mono transition-all cursor-pointer"
+          title="Open Cloud Database Hub"
+        >
+          <span className={`w-2 h-2 rounded-full ${dbStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+          <span className="text-zinc-300 text-[11px]">
+            Cloud DB: <strong className={dbStatus === 'connected' ? 'text-emerald-400' : 'text-amber-400'}>{dbStatus === 'connected' ? 'Connected' : dbStatus}</strong>
+          </span>
+        </button>
+
         {/* Role Selector */}
         <div className="flex items-center gap-2 bg-zinc-950 p-1.5 rounded-xl border border-zinc-800">
           <span className="text-[11px] text-zinc-400 pl-2 font-mono flex items-center gap-1">

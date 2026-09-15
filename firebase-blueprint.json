@@ -1,0 +1,148 @@
+{
+  "entities": {
+    "notice": {
+      "title": "NoticeItem",
+      "description": "Official notice, bulletin or press release",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "badge": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string" },
+        "pinned": { "type": "boolean" },
+        "actionLink": { "type": "string" },
+        "actionText": { "type": "string" }
+      },
+      "required": ["id", "title", "content"]
+    },
+    "event": {
+      "title": "CyclingEvent",
+      "description": "Cycling event or race",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["id", "title", "date"]
+    },
+    "result": {
+      "title": "LeaderboardResult",
+      "description": "Race result / podium entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventTitle": { "type": "string" },
+        "riderName": { "type": "string" },
+        "position": { "type": "number" }
+      },
+      "required": ["id", "eventTitle", "riderName", "position"]
+    },
+    "rider": {
+      "title": "RiderProfile",
+      "description": "Rider profile or club member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "galleryPhoto": {
+      "title": "GalleryPhotoItem",
+      "description": "Photo uploaded to the media gallery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "imageUrl"]
+    },
+    "sponsor": {
+      "title": "SponsorItem",
+      "description": "Club partner or sponsor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tier": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "socialMedia": {
+      "title": "SocialMediaItem",
+      "description": "Social media post or video link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "platform": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "siteContent": {
+      "title": "SiteContentSettings",
+      "description": "Public site copy and hotline configuration",
+      "type": "object",
+      "properties": {
+        "announcementBanner": { "type": "string" },
+        "hotline1": { "type": "string" },
+        "hotline2": { "type": "string" }
+      }
+    },
+    "auditLog": {
+      "title": "AuditLogEntry",
+      "description": "Audit trail of changes made by administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/notices/{noticeId}": {
+      "schema": "notice",
+      "description": "Notices and press releases"
+    },
+    "/events/{eventId}": {
+      "schema": "event",
+      "description": "Cycling events and races"
+    },
+    "/results/{resultId}": {
+      "schema": "result",
+      "description": "Leaderboard results"
+    },
+    "/riders/{riderId}": {
+      "schema": "rider",
+      "description": "Riders and registered athletes"
+    },
+    "/gallery/{photoId}": {
+      "schema": "galleryPhoto",
+      "description": "Gallery photos"
+    },
+    "/sponsors/{sponsorId}": {
+      "schema": "sponsor",
+      "description": "Club sponsors"
+    },
+    "/socialMedia/{mediaId}": {
+      "schema": "socialMedia",
+      "description": "Curated social videos and posts"
+    },
+    "/settings/siteContent": {
+      "schema": "siteContent",
+      "description": "CMS settings"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "auditLog",
+      "description": "System and admin audit trail"
+    }
+  }
+}

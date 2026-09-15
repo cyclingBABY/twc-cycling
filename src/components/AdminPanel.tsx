@@ -20,6 +20,8 @@ import { AdminRiderCRM } from './admin/AdminRiderCRM';
 import { AdminFinancials } from './admin/AdminFinancials';
 import { AdminCMS } from './admin/AdminCMS';
 import { AdminSettingsSecurity } from './admin/AdminSettingsSecurity';
+import { DatabaseSyncCenter } from './admin/DatabaseSyncCenter';
+import { DatabaseActionRecord } from '../services/dbService';
 import {
   LayoutDashboard,
   Calendar,
@@ -34,6 +36,7 @@ import {
   EyeOff,
   Sparkles,
   CheckCircle2,
+  Database,
 } from 'lucide-react';
 
 const ACCESS_CODE = 'twc@code5';
@@ -83,10 +86,24 @@ interface AdminPanelProps {
     youtube: SocialMediaItem[];
     tiktok: SocialMediaItem[];
     instagram: SocialMediaItem[];
+    uploads?: SocialMediaItem[];
   };
+  uploadedMedia?: SocialMediaItem[];
+  onAddUploadedMedia?: (item: SocialMediaItem, blob?: Blob) => Promise<void> | void;
+  onUpdateUploadedMedia?: (item: SocialMediaItem, blob?: Blob) => Promise<void> | void;
+  onDeleteUploadedMedia?: (id: string) => Promise<void> | void;
   onSaveMediaLink: (platform: 'youtube' | 'tiktok' | 'instagram', index: number, updatedItem: SocialMediaItem) => void;
   onAddMediaItem: (platform: 'youtube' | 'tiktok' | 'instagram', item: SocialMediaItem) => void;
   onDeleteMediaItem: (platform: 'youtube' | 'tiktok' | 'instagram', id: string) => void;
+  // Database State & Actions
+  dbStatus?: 'connected' | 'offline' | 'connecting' | 'error';
+  isSyncing?: boolean;
+  lastSyncTime?: string | null;
+  recentDbActions?: DatabaseActionRecord[];
+  onSyncAll?: () => Promise<void>;
+  onSeedCloud?: () => Promise<void>;
+  onReloadCloud?: () => Promise<void>;
+  onTestConnection?: () => Promise<void>;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -129,9 +146,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   auditLogs,
   onResetAllAdminData,
   mediaData,
+  uploadedMedia = [],
+  onAddUploadedMedia,
+  onUpdateUploadedMedia,
+  onDeleteUploadedMedia,
   onSaveMediaLink,
   onAddMediaItem,
   onDeleteMediaItem,
+  dbStatus = 'connected',
+  isSyncing = false,
+  lastSyncTime = null,
+  recentDbActions = [],
+  onSyncAll = async () => {},
+  onSeedCloud = async () => {},
+  onReloadCloud = async () => {},
+  onTestConnection = async () => {},
 }) => {
   const [passcode, setPasscode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -144,7 +173,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
   const [authError, setAuthError] = useState('');
   const [activeModule, setActiveModule] = useState<
-    'dashboard' | 'events' | 'crm' | 'financials' | 'cms' | 'security'
+    'dashboard' | 'events' | 'crm' | 'financials' | 'cms' | 'database' | 'security'
   >('dashboard');
 
   if (!isOpen) return null;
@@ -274,9 +303,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           onClose={onClose}
           onLogout={handleLogout}
           activeModuleTitle={activeModule}
+          dbStatus={dbStatus}
+          onOpenDatabaseSync={() => setActiveModule('database')}
         />
 
-        {/* 6-Module Primary Navigation Tabs */}
+        {/* 7-Module Primary Navigation Tabs */}
         <div className="bg-zinc-900 border-b border-zinc-800 px-4 sm:px-6 overflow-x-auto flex items-center gap-2 sm:gap-4 py-2 flex-shrink-0">
           {/* Module 1: Dashboard */}
           <button
@@ -352,7 +383,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </span>
           </button>
 
-          {/* Module 6: Settings & Security Controls */}
+          {/* Module 6: Cloud Database Sync & Activity Feed */}
+          <button
+            id="admin-tab-database"
+            onClick={() => setActiveModule('database')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold font-heading flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeModule === 'database'
+                ? 'bg-amber-500 text-black shadow-md font-extrabold'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>6. Cloud Database & Sync</span>
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </span>
+          </button>
+
+          {/* Module 7: Settings & Security Controls */}
           <button
             onClick={() => setActiveModule('security')}
             className={`px-3 py-2 rounded-xl text-xs font-bold font-heading flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -362,7 +411,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>6. RBAC & Audits</span>
+            <span>7. RBAC & Audits</span>
           </button>
         </div>
 
@@ -438,6 +487,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onSaveMediaLink={onSaveMediaLink}
               onAddMediaItem={onAddMediaItem}
               onDeleteMediaItem={onDeleteMediaItem}
+              uploadedMedia={uploadedMedia}
+              onAddUploadedMedia={onAddUploadedMedia}
+              onUpdateUploadedMedia={onUpdateUploadedMedia}
+              onDeleteUploadedMedia={onDeleteUploadedMedia}
+            />
+          )}
+
+          {activeModule === 'database' && (
+            <DatabaseSyncCenter
+              dbStatus={dbStatus}
+              isSyncing={isSyncing}
+              lastSyncTime={lastSyncTime}
+              recentActions={recentDbActions}
+              onSyncAll={onSyncAll}
+              onSeedCloud={onSeedCloud}
+              onReloadCloud={onReloadCloud}
+              onTestConnection={onTestConnection}
+              counts={{
+                events: events.length,
+                notices: notices.length,
+                riders: riders.length,
+                results: leaderboard.length,
+                sponsors: sponsors.length,
+                gallery: galleryPhotos.length,
+              }}
             />
           )}
 

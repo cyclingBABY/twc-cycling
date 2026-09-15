@@ -67,7 +67,7 @@ export const INITIAL_EVENTS: CyclingEvent[] = [
     circuit: 'Cross-Terrain Regional Highway & Gravel Corridor',
     distanceSummary: '68 km Memorial Solidarity Road Stage',
     description: 'TWC Cycling Academy riders traveled over 450 km from Kampala to Kitgum in Northern Uganda to headline the Irene Gleeson Memorial Bicycle Race, supporting orphaned youth and community health.',
-    heroImage: 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop',
+    heroImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7WBsfFNzFp04i3JTuiQCmIxNf9Y1L6-TeUcaewO_8mg&s',
     registrationStatus: 'completed',
     officialContacts: ['+256 706 770 872'],
     categories: [
@@ -102,7 +102,7 @@ export const INITIAL_EVENTS: CyclingEvent[] = [
     circuit: '2.4 km Urban Circuit',
     distanceSummary: '36 km Junior Showcase',
     description: 'A grassroots speed race designed specifically for self-funded riders, junior mechanics, and secondary school youth based around Katwe, BMK House, and Makindye.',
-    heroImage: 'https://images.unsplash.com/photo-1474962558142-9ca83af74bb7?q=80&w=1600&auto=format&fit=crop',
+    heroImage: '/images/katwe-grassroots-criterium.jpg',
     registrationStatus: 'open',
     registrationDeadline: 'Registration open until race morning',
     officialContacts: ['+256 706 770 872'],
@@ -512,6 +512,24 @@ export const INITIAL_GALLERY_PHOTOS: GalleryPhotoItem[] = [
     caption: 'Dedicated junior mechanics aligning spoke tension on second-hand carbon racing wheels.',
     eventTag: 'BMK House Katwe',
     date: 'Aug 2026',
+  },
+  {
+    id: 'gal-5',
+    title: 'Irene Gleeson Memorial Bicycle Race - Kitgum Caravan',
+    imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7WBsfFNzFp04i3JTuiQCmIxNf9Y1L6-TeUcaewO_8mg&s',
+    caption: 'TWC Cycling Academy athletes racing in the Irene Gleeson Memorial Bicycle Race in Kitgum, Northern Uganda.',
+    eventTag: 'Irene Gleeson Memorial',
+    category: 'Races',
+    date: 'Aug 2026',
+  },
+  {
+    id: 'gal-6',
+    title: 'Katwe Grassroots Youth Criterium - Start Line Peloton',
+    imageUrl: '/images/katwe-grassroots-criterium.jpg',
+    caption: 'Together We Can Cycling UG junior riders and mechanics lined up at the start line of the Katwe Grassroots Youth Criterium in Kampala.',
+    eventTag: 'Katwe Grassroots Criterium',
+    category: 'Races',
+    date: 'Dec 2026',
   },
 ];
 

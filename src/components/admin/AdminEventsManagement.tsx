@@ -377,6 +377,17 @@ export const AdminEventsManagement: React.FC<AdminEventsManagementProps> = ({
                 className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3 relative overflow-hidden flex flex-col justify-between"
               >
                 <div>
+                  {ev.heroImage && (
+                    <div className="h-28 w-full rounded-xl overflow-hidden mb-3 bg-zinc-950 border border-zinc-800 relative">
+                      <img
+                        src={ev.heroImage}
+                        alt={ev.title}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between gap-2">
                     <span
                       className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${

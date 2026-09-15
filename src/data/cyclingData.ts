@@ -152,7 +152,7 @@ export const EVENTS_DATA: CyclingEvent[] = [
     circuit: 'Cross-Terrain Regional Highway & Gravel Corridor',
     distanceSummary: '68 km Memorial Solidarity Road Stage',
     description: 'TWC Cycling Academy riders traveled over 450 km from Kampala to Kitgum in Northern Uganda to headline the Irene Gleeson Memorial Bicycle Race. Supporting orphaned youth, community health initiatives, and demonstrating the bicycle as a tool for post-conflict healing and unity.',
-    heroImage: 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1600&auto=format&fit=crop',
+    heroImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7WBsfFNzFp04i3JTuiQCmIxNf9Y1L6-TeUcaewO_8mg&s',
     registrationStatus: 'completed',
     officialContacts: ['+256 706 770 872'],
     categories: [
@@ -187,7 +187,7 @@ export const EVENTS_DATA: CyclingEvent[] = [
     circuit: '2.4 km Urban Circuit',
     distanceSummary: '36 km Junior Showcase',
     description: 'A focused grassroots speed race designed specifically for self-funded riders, young bicycle mechanics, and secondary school riders based around Katwe, BMK House, and Makindye.',
-    heroImage: 'https://images.unsplash.com/photo-1474962558142-9ca83af74bb7?q=80&w=1600&auto=format&fit=crop',
+    heroImage: '/images/katwe-grassroots-criterium.jpg',
     registrationStatus: 'open',
     registrationDeadline: 'Registration open until race morning',
     officialContacts: ['+256 706 770 872', '+256 763 145 915'],
@@ -246,7 +246,7 @@ export const ADVOCACY_STORIES: CommunityAdvocacyStory[] = [
     year: 'Regional Advocacy Milestone',
     summary: 'Led by Director Solomon Ssebakaki, TWC Cycling Academy mounted a full caravan to travel from Katwe, Kampala to Northern Uganda. Competing in the Irene Gleeson Memorial Bicycle Race, the team bridged sports diplomacy and charity, uplifting youth affected by historical regional conflicts.',
     impactMetrics: '450+ km journey • 18 TWC Athletes fielded • Supported 200+ local school children',
-    imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=1200&auto=format&fit=crop',
+    imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7WBsfFNzFp04i3JTuiQCmIxNf9Y1L6-TeUcaewO_8mg&s',
     tags: ['Northern Uganda', 'Memorial Race', 'Peace & Youth', 'Regional Tour'],
     keyHighlight: 'Demonstrated how grassroots cycling connects urban athletes with rural communities in national unity.',
   },
@@ -318,9 +318,143 @@ export interface MediaVideoItem {
 
 export function extractYouTubeId(url?: string): string | null {
   if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const regExp = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|live\/|watch\?v=|watch\?.+&v=))([\w-]{11})/;
   const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
+  if (match && match[1]) return match[1];
+  const fallback = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|&v=)([^#&?]{11}).*/;
+  const fbMatch = url.match(fallback);
+  return fbMatch ? fbMatch[2] : null;
+}
+
+export function extractTikTokInfo(url?: string): {
+  isTikTok: boolean;
+  videoId?: string;
+  username?: string;
+  cleanUrl: string;
+  embedUrl?: string;
+} {
+  if (!url || !url.trim()) return { isTikTok: false, cleanUrl: '' };
+  const cleaned = url.trim();
+  const isTikTok = /(?:tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)/i.test(cleaned);
+
+  // Extract video ID (e.g. /video/7339182391234567890 or /v/7339182391234567890 or /embed/v2/7339182391234567890)
+  const videoIdMatch = cleaned.match(/(?:video\/|v\/|embed\/v2\/|embed\/|player\/v1\/)(\d+)/);
+  const videoId = videoIdMatch ? videoIdMatch[1] : undefined;
+
+  // Extract username (e.g. /@togetherwecancyclingug)
+  const userMatch = cleaned.match(/@([\w.-]+)/);
+  const username = userMatch ? userMatch[1] : undefined;
+
+  const embedUrl = videoId ? `https://www.tiktok.com/embed/v2/${videoId}` : undefined;
+
+  return {
+    isTikTok,
+    videoId,
+    username,
+    cleanUrl: cleaned,
+    embedUrl,
+  };
+}
+
+export interface TikTokPreviewData {
+  thumbnailUrl?: string;
+  title?: string;
+  authorName?: string;
+  authorUniqueId?: string;
+  embedHtml?: string;
+  videoId?: string;
+  embedUrl?: string;
+}
+
+/**
+ * Automatically fetch preview metadata (cover thumbnail, video title, author)
+ * directly from the provided TikTok video link using oEmbed API
+ */
+export async function fetchTikTokMediaPreview(url: string): Promise<TikTokPreviewData | null> {
+  if (!url || !url.trim()) return null;
+  const info = extractTikTokInfo(url);
+  if (!info.isTikTok) return null;
+
+  const baseResult: TikTokPreviewData = {
+    videoId: info.videoId,
+    embedUrl: info.embedUrl,
+  };
+
+  try {
+    const res = await fetch(`/api/tiktok-oembed?url=${encodeURIComponent(info.cleanUrl)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && (data.thumbnail_url || data.title)) {
+        return {
+          thumbnailUrl: data.thumbnail_url,
+          title: data.title,
+          authorName: data.author_name,
+          authorUniqueId: data.author_unique_id,
+          embedHtml: data.html,
+          videoId: data.embed_product_id || info.videoId,
+          embedUrl: `https://www.tiktok.com/embed/v2/${data.embed_product_id || info.videoId}`,
+        };
+      }
+    }
+  } catch {
+    // fallback to direct request
+  }
+
+  try {
+    const directRes = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(info.cleanUrl)}`);
+    if (directRes.ok) {
+      const data = await directRes.json();
+      if (data && (data.thumbnail_url || data.title)) {
+        return {
+          thumbnailUrl: data.thumbnail_url,
+          title: data.title,
+          authorName: data.author_name,
+          authorUniqueId: data.author_unique_id,
+          embedHtml: data.html,
+          videoId: data.embed_product_id || info.videoId,
+          embedUrl: `https://www.tiktok.com/embed/v2/${data.embed_product_id || info.videoId}`,
+        };
+      }
+    }
+  } catch {
+    // Ignore error
+  }
+
+  return baseResult;
+}
+
+export function extractInstagramInfo(url?: string): {
+  isInstagram: boolean;
+  shortcode?: string;
+  isReel: boolean;
+  username?: string;
+  cleanUrl: string;
+} {
+  if (!url || !url.trim()) return { isInstagram: false, isReel: false, cleanUrl: '' };
+  const cleaned = url.trim();
+  const isInstagram = /(?:instagram\.com|instagr\.am)/i.test(cleaned);
+
+  // Check if reel
+  const isReel = /(?:\/reel\/|\/reels\/)/i.test(cleaned);
+
+  // Extract post or reel shortcode (e.g. /p/C8qL90X.../ or /reel/C8qL90X.../)
+  const codeMatch = cleaned.match(/(?:\/p\/|\/reel\/|\/reels\/|\/tv\/)([\w-]+)/);
+  const shortcode = codeMatch ? codeMatch[1] : undefined;
+
+  // Extract username if profile
+  const userMatch = cleaned.match(/(?:instagram\.com|instagr\.am)\/([a-zA-Z0-9._]+)/);
+  const username =
+    userMatch && !['p', 'reel', 'reels', 'tv', 'stories', 'explore'].includes(userMatch[1])
+      ? userMatch[1]
+      : undefined;
+
+  return {
+    isInstagram,
+    shortcode,
+    isReel,
+    username,
+    cleanUrl: cleaned,
+  };
 }
 
 export function formatContentUrl(url?: string, defaultUrl?: string): string {
@@ -342,6 +476,11 @@ export interface TikTokItem {
   thumbnail: string;
   videoUrl: string;
   tag: string;
+  category?: string;
+  title?: string;
+  url?: string;
+  mediaUrl?: string;
+  embedId?: string;
 }
 
 export interface InstagramItem {
@@ -354,6 +493,14 @@ export interface InstagramItem {
   postUrl: string;
   location: string;
   tag: string;
+  category?: string;
+  title?: string;
+  url?: string;
+  thumbnail?: string;
+  videoUrl?: string;
+  mediaUrl?: string;
+  shortcode?: string;
+  embedId?: string;
 }
 
 export const YOUTUBE_CHANNEL = {
@@ -386,10 +533,11 @@ export const YOUTUBE_MEDIA: MediaVideoItem[] = [
     views: '4.7K views',
     uploadDate: 'Tour Highlights',
     category: 'Regional Classic',
-    thumbnail: 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=800&auto=format&fit=crop',
+    thumbnail: '/images/aziz-ssempijja-race.jpg',
+    youtubeId: 'DCHD5gQPYqA',
     channelId: 'UCcyYTjupx6KfAfe-ON_Wqlg',
     description: 'Star cyclist Aziz Ssempijja puts on a masterclass performance in the challenging terrain of the Western Uganda Kasese classic tour.',
-    videoUrl: 'https://www.youtube.com/channel/UCcyYTjupx6KfAfe-ON_Wqlg',
+    videoUrl: 'https://www.youtube.com/watch?v=DCHD5gQPYqA',
   },
   {
     id: 'yt-3',
@@ -410,10 +558,11 @@ export const YOUTUBE_MEDIA: MediaVideoItem[] = [
     views: '3.4K views',
     uploadDate: 'Youth Initiative',
     category: 'Grassroots Education',
-    thumbnail: 'https://images.unsplash.com/photo-1502680390469-be75c86b636f?q=80&w=800&auto=format&fit=crop',
+    thumbnail: '/images/namilyango-cycling-school.jpg',
+    youtubeId: '7KxG7z0I00Q',
     channelId: 'UCcyYTjupx6KfAfe-ON_Wqlg',
     description: 'TWC Cycling Academy introducing competitive cycling programs, safety clinics, and bike mentorship to students at Namilyango High School Gulama.',
-    videoUrl: 'https://www.youtube.com/channel/UCcyYTjupx6KfAfe-ON_Wqlg',
+    videoUrl: 'https://www.youtube.com/watch?v=7KxG7z0I00Q',
   },
   {
     id: 'yt-5',
@@ -422,10 +571,11 @@ export const YOUTUBE_MEDIA: MediaVideoItem[] = [
     views: '4.1K views',
     uploadDate: 'Peloton Pack',
     category: 'Joint Road Training',
-    thumbnail: 'https://images.unsplash.com/photo-1474962558142-9ca83af74bb7?q=80&w=800&auto=format&fit=crop',
+    thumbnail: '/images/together-we-unite-peloton.jpg',
+    youtubeId: 'V0MWeSsgF-s',
     channelId: 'UCcyYTjupx6KfAfe-ON_Wqlg',
     description: 'Over 100 Ugandan cyclists from multiple clubs and divisions riding together in a historic joint endurance training peloton across Kampala.',
-    videoUrl: 'https://www.youtube.com/channel/UCcyYTjupx6KfAfe-ON_Wqlg',
+    videoUrl: 'https://www.youtube.com/watch?v=V0MWeSsgF-s',
   },
   {
     id: 'yt-6',
@@ -439,11 +589,27 @@ export const YOUTUBE_MEDIA: MediaVideoItem[] = [
     description: 'Intense wheel-to-wheel academy racing featuring club veterans, rising youth, and national contenders testing their race fitness.',
     videoUrl: 'https://www.youtube.com/channel/UCcyYTjupx6KfAfe-ON_Wqlg',
   },
+  {
+    id: 'yt-lubiri-drill',
+    title: 'Lubiri Ring Road Sprint Pack Training Drill',
+    duration: '0:58',
+    views: '2.4K views',
+    uploadDate: 'Circuit Training',
+    category: 'Youth Training',
+    thumbnail: '/images/lubiri-sprint-drill.jpg',
+    youtubeId: 'nBz2AddtXRY',
+    channelId: 'UCcyYTjupx6KfAfe-ON_Wqlg',
+    description: 'TWC youth squad paceline execution and drafting techniques around the 3.8 km Lubiri Palace tarmac circuit.',
+    videoUrl: 'https://www.youtube.com/watch?v=nBz2AddtXRY',
+  },
 ];
 
 export const TIKTOK_ACCOUNT = {
+  name: 'Together We Can Cycling UG',
   handle: '@togetherwecancyclingug',
   displayName: 'Together We Can Cycling UG',
+  followers: '24.8K',
+  likes: '340K',
   url: 'https://www.tiktok.com/@togetherwecancyclingug?is_from_webapp=1&sender_device=pc',
   bio: 'Uganda’s premier cycling academy 🇺🇬 | Katwe, Kampala | Manager Solo | Pelotons, sprints & youth empowerment 🚲',
 };
@@ -496,7 +662,10 @@ export const TIKTOK_MEDIA: TikTokItem[] = [
 ];
 
 export const INSTAGRAM_ACCOUNT = {
+  name: 'TWC Cycling Uganda',
   handle: '@togetherwecancyclingug',
+  displayName: 'Together We Can Cycling UG',
+  followers: '14.2K',
   url: 'https://www.instagram.com/togetherwecancyclingug/',
   bio: 'Official Instagram of Together We Can Cycling Uganda Limited. Home of the Lubiri 105KM Reconciliatory Race.',
 };
@@ -530,7 +699,7 @@ export const INSTAGRAM_MEDIA: InstagramItem[] = [
     likes: '1,890',
     comments: '114',
     date: 'LAST WEEK',
-    imageUrl: 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=800&auto=format&fit=crop',
+    imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7WBsfFNzFp04i3JTuiQCmIxNf9Y1L6-TeUcaewO_8mg&s',
     postUrl: 'https://www.instagram.com/togetherwecancyclingug/',
     location: 'Kitgum, Northern Uganda',
     tag: 'Memorial Tour',

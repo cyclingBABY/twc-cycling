@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Basic ID check to ensure well-formed document IDs
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow write: if isValidId(noticeId);
+    }
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isValidId(eventId);
+    }
+
+    match /results/{resultId} {
+      allow read: if true;
+      allow write: if isValidId(resultId);
+    }
+
+    match /riders/{riderId} {
+      allow read: if true;
+      allow write: if isValidId(riderId);
+    }
+
+    match /training/{sessionId} {
+      allow read: if true;
+      allow write: if isValidId(sessionId);
+    }
+
+    match /transactions/{txId} {
+      allow read: if true;
+      allow write: if isValidId(txId);
+    }
+
+    match /gallery/{photoId} {
+      allow read: if true;
+      allow write: if isValidId(photoId);
+    }
+
+    match /sponsors/{sponsorId} {
+      allow read: if true;
+      allow write: if isValidId(sponsorId);
+    }
+
+    match /socialMedia/{mediaId} {
+      allow read: if true;
+      allow write: if isValidId(mediaId);
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isValidId(docId);
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if true;
+      allow write: if isValidId(logId);
+    }
+
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
